@@ -20,10 +20,11 @@ def format_summary(rows: list[dict[str, Any]], group_by: str) -> str:
         output = _fmt_int(row.get("output_tokens"))
         reasoning = _fmt_int(row.get("reasoning_output_tokens"))
         cache_ratio = _fmt_pct(row.get("avg_cache_ratio"))
+        cost = _cost_suffix(row)
         lines.append(
             f"- {label}: {total} total tokens across {calls} model calls "
             f"({sessions} sessions, {cached} cached input, {uncached} uncached input, "
-            f"{output} output, {reasoning} reasoning output, avg cache {cache_ratio})"
+            f"{output} output, {reasoning} reasoning output, avg cache {cache_ratio}{cost})"
         )
     return "\n".join(lines)
 
@@ -52,6 +53,43 @@ def format_session(rows: list[dict[str, Any]]) -> str:
     return "\n".join(lines)
 
 
+def format_calls(rows: list[dict[str, Any]], title: str = "Most expensive Codex calls") -> str:
+    if not rows:
+        return "No Codex usage records found. Run refresh_usage_index first."
+
+    lines = [title, ""]
+    for index, row in enumerate(rows, 1):
+        thread = row.get("thread_name") or row.get("session_id") or "Unknown"
+        flags = row.get("efficiency_flags") or []
+        flag_suffix = f" | flags: {', '.join(flags)}" if flags else ""
+        cost = _cost_suffix(row, prefix=" | estimated cost ")
+        lines.append(
+            f"{index}. {row.get('event_timestamp') or 'Unknown time'} | "
+            f"{thread} | {row.get('model') or 'unknown'} "
+            f"({row.get('effort') or 'unknown'}) | "
+            f"last call {_fmt_int(row.get('total_tokens'))} tokens | "
+            f"cache {_fmt_pct(row.get('cache_ratio'))} | "
+            f"context {_fmt_pct(row.get('context_window_percent'))}"
+            f"{cost}{flag_suffix}"
+        )
+    return "\n".join(lines)
+
+
+def format_doctor(report: dict[str, Any]) -> str:
+    lines = [
+        f"Codex Usage Tracker doctor: {str(report.get('status', 'unknown')).upper()}",
+        f"Failures: {report.get('failures', 0)} | warnings: {report.get('warnings', 0)}",
+        "",
+    ]
+    for check in report.get("checks", []):
+        status = str(check.get("status", "unknown")).upper()
+        lines.append(f"- [{status}] {check.get('name')}: {check.get('detail')}")
+        remediation = check.get("remediation")
+        if remediation:
+            lines.append(f"  Next: {remediation}")
+    return "\n".join(lines)
+
+
 def _fmt_int(value: object) -> str:
     try:
         return f"{int(value):,}"
@@ -64,3 +102,21 @@ def _fmt_pct(value: object) -> str:
         return f"{float(value) * 100:.1f}%"
     except (TypeError, ValueError):
         return "0.0%"
+
+
+def _fmt_money(value: object) -> str:
+    try:
+        amount = float(value)
+    except (TypeError, ValueError):
+        return ""
+    if amount <= 0:
+        return "$0.00"
+    if amount < 0.01:
+        return f"${amount:.4f}"
+    return f"${amount:.2f}"
+
+
+def _cost_suffix(row: dict[str, Any], prefix: str = ", estimated cost ") -> str:
+    if row.get("estimated_cost_usd") is None:
+        return ""
+    return f"{prefix}{_fmt_money(row.get('estimated_cost_usd'))}"

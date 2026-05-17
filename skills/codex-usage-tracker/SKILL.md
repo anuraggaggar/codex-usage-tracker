@@ -14,7 +14,11 @@ The tracker is aggregate-only. It should never return prompts, assistant message
 ## Common Workflows
 
 - Refresh the index before answering usage questions.
+- Use `usage_doctor` when setup, plugin discovery, MCP launch, dashboard output, or pricing estimates look wrong.
 - Use `usage_summary` for high-level totals by date, model, effort, cwd, thread, or session.
+- Use `usage_summary` presets `today`, `last-7-days`, `by-model`, `by-cwd`, `by-thread`, and `expensive` for common requests.
 - Use `session_usage` for per-call and per-turn detail for one session.
+- Use `most_expensive_usage_calls` to identify high-token calls and aggregate efficiency signals.
 - Use `generate_usage_dashboard` when the user wants a visual hoverable report.
 - Use `export_usage_csv` when the user wants local spreadsheet-friendly data.
+- Use `init_usage_pricing_config` only when the user wants optional local cost estimates; the user must fill in current model rates.

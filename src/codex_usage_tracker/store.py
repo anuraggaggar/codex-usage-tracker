@@ -148,9 +148,13 @@ def upsert_usage_events(
 
 
 def query_summary(
-    db_path: Path = DEFAULT_DB_PATH, group_by: str = "thread", limit: int = 20
+    db_path: Path = DEFAULT_DB_PATH,
+    group_by: str = "thread",
+    limit: int = 20,
+    since: str | None = None,
 ) -> list[dict[str, Any]]:
     group_expr = _group_expression(group_by)
+    where_clause, params = _since_where_clause(since)
     sql = f"""
         SELECT
             {group_expr} AS group_key,
@@ -168,13 +172,15 @@ def query_summary(
             AVG(context_window_percent) AS avg_context_window_percent,
             MAX(event_timestamp) AS latest_event
         FROM usage_events
+        {where_clause}
         GROUP BY group_key
         ORDER BY total_tokens DESC
         LIMIT ?
     """
+    params.append(limit)
     with connect(db_path) as conn:
         init_db(conn)
-        return [_row_to_dict(row) for row in conn.execute(sql, (limit,))]
+        return [_row_to_dict(row) for row in conn.execute(sql, params)]
 
 
 def query_session_usage(
@@ -211,18 +217,41 @@ def query_session_usage(
 
 
 def query_dashboard_events(
-    db_path: Path = DEFAULT_DB_PATH, limit: int = 5000
+    db_path: Path = DEFAULT_DB_PATH, limit: int = 5000, since: str | None = None
 ) -> list[dict[str, Any]]:
+    where_clause, params = _since_where_clause(since)
     with connect(db_path) as conn:
         init_db(conn)
         rows = conn.execute(
-            """
+            f"""
             SELECT *
             FROM usage_events
+            {where_clause}
             ORDER BY event_timestamp DESC, cumulative_total_tokens DESC
             LIMIT ?
             """,
-            (limit,),
+            (*params, limit),
+        )
+        return [_row_to_dict(row) for row in rows]
+
+
+def query_most_expensive_calls(
+    db_path: Path = DEFAULT_DB_PATH, limit: int = 20, since: str | None = None
+) -> list[dict[str, Any]]:
+    """Return the largest aggregate model calls by last-call token count."""
+
+    where_clause, params = _since_where_clause(since)
+    with connect(db_path) as conn:
+        init_db(conn)
+        rows = conn.execute(
+            f"""
+            SELECT *
+            FROM usage_events
+            {where_clause}
+            ORDER BY total_tokens DESC, event_timestamp DESC
+            LIMIT ?
+            """,
+            (*params, limit),
         )
         return [_row_to_dict(row) for row in rows]
 
@@ -262,6 +291,12 @@ def _group_expression(group_by: str) -> str:
     except KeyError as exc:
         allowed = ", ".join(sorted(mapping))
         raise ValueError(f"group_by must be one of: {allowed}") from exc
+
+
+def _since_where_clause(since: str | None) -> tuple[str, list[str]]:
+    if not since:
+        return "", []
+    return "WHERE event_timestamp >= ?", [since]
 
 
 def _row_to_dict(row: sqlite3.Row) -> dict[str, Any]:

@@ -14,6 +14,7 @@ This repo builds a local Codex plugin and dashboard that track aggregate token u
 ## Repo Layout
 
 - `src/codex_usage_tracker/` - parser, SQLite store, reports, dashboard, CLI, and MCP server.
+- `~/.codex-usage-tracker/pricing.json` - optional local-only pricing config, never committed.
 - `.codex-plugin/plugin.json` - Codex plugin manifest.
 - `.mcp.json` - MCP server configuration for Codex.
 - `scripts/install_local_plugin.py` - local plugin registration script.
@@ -33,7 +34,9 @@ python -m pip install ".[dev]"
 ```bash
 python -m pytest
 python -m compileall src
+codex-usage-tracker doctor
 codex-usage-tracker dashboard --output /tmp/codex-usage-dashboard.html
+codex-usage-tracker expensive --limit 5
 ```
 
 ## Privacy Rules
@@ -42,6 +45,7 @@ codex-usage-tracker dashboard --output /tmp/codex-usage-dashboard.html
 - Never store raw prompts, assistant text, tool outputs, pasted secrets, or message snippets.
 - Keep fixture data synthetic.
 - Keep local SQLite databases, CSV exports, HTML dashboards, caches, and virtualenvs out of git.
+- Do not hard-code real current model pricing in source; use local pricing config for estimates.
 
 ## Definition Of Done
 
@@ -49,4 +53,5 @@ codex-usage-tracker dashboard --output /tmp/codex-usage-dashboard.html
 - SQLite refresh is idempotent.
 - MCP tool functions return concise aggregate data.
 - Dashboard is generated from aggregate-only JSON.
+- Doctor, summary presets, dashboard, and expensive-call views work from CLI and MCP wrappers.
 - Tests and compile checks pass.

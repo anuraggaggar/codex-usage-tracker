@@ -6,16 +6,26 @@ import html
 import json
 from pathlib import Path
 
-from codex_usage_tracker.paths import DEFAULT_DASHBOARD_PATH
+from codex_usage_tracker.paths import DEFAULT_DASHBOARD_PATH, DEFAULT_PRICING_PATH
+from codex_usage_tracker.pricing import annotate_rows_with_efficiency, load_pricing_config
 from codex_usage_tracker.store import query_dashboard_events
 
 
 def generate_dashboard(
-    db_path: Path, output_path: Path = DEFAULT_DASHBOARD_PATH, limit: int = 5000
+    db_path: Path,
+    output_path: Path = DEFAULT_DASHBOARD_PATH,
+    limit: int = 5000,
+    pricing_path: Path = DEFAULT_PRICING_PATH,
+    since: str | None = None,
 ) -> Path:
-    rows = query_dashboard_events(db_path=db_path, limit=limit)
+    rows = query_dashboard_events(db_path=db_path, limit=limit, since=since)
+    pricing = load_pricing_config(pricing_path)
+    rows = annotate_rows_with_efficiency(rows, pricing)
     output_path.parent.mkdir(parents=True, exist_ok=True)
-    payload = json.dumps(rows, ensure_ascii=True).replace("</", "<\\/")
+    payload = json.dumps(
+        {"rows": rows, "pricing_configured": pricing.loaded and not pricing.error},
+        ensure_ascii=True,
+    ).replace("</", "<\\/")
     output_path.write_text(_html(payload), encoding="utf-8")
     return output_path
 
@@ -40,6 +50,7 @@ def _html(payload: str) -> str:
       --green: #047857;
       --amber: #b45309;
       --red: #b91c1c;
+      --violet: #6d28d9;
       --shadow: 0 12px 32px rgba(23, 32, 51, 0.09);
     }}
     * {{ box-sizing: border-box; }}
@@ -76,7 +87,7 @@ def _html(payload: str) -> str:
     }}
     .cards {{
       display: grid;
-      grid-template-columns: repeat(4, minmax(150px, 1fr));
+      grid-template-columns: repeat(5, minmax(140px, 1fr));
       gap: 12px;
       margin-bottom: 18px;
     }}
@@ -124,6 +135,24 @@ def _html(payload: str) -> str:
       font-weight: 680;
       font-size: 12px;
     }}
+    .flags {{
+      display: flex;
+      flex-wrap: wrap;
+      gap: 4px;
+      justify-content: flex-end;
+    }}
+    .flag {{
+      display: inline-flex;
+      min-height: 20px;
+      align-items: center;
+      padding: 1px 7px;
+      border-radius: 999px;
+      background: #f5e8ff;
+      color: var(--violet);
+      font-size: 11px;
+      font-weight: 680;
+      white-space: nowrap;
+    }}
     .detail {{
       padding: 14px 16px;
       min-height: 280px;
@@ -151,13 +180,14 @@ def _html(payload: str) -> str:
       <label>Search<input id="search" type="search" placeholder="Thread, cwd, model, session"></label>
       <label>Model<select id="model"><option value="">All models</option></select></label>
       <label>Reasoning<select id="effort"><option value="">All efforts</option></select></label>
-      <label>Sort<select id="sort"><option value="total">Most expensive calls</option><option value="time">Newest calls</option><option value="cache">Lowest cache ratio</option><option value="context">Highest context use</option></select></label>
+      <label>Sort<select id="sort"><option value="total">Most tokens</option><option value="cost">Highest estimated cost</option><option value="time">Newest calls</option><option value="cache">Lowest cache ratio</option><option value="context">Highest context use</option></select></label>
     </div>
     <div class="cards">
       <div class="card"><span>Visible Calls</span><strong id="visibleCalls">0</strong></div>
       <div class="card"><span>Total Tokens</span><strong id="totalTokens">0</strong></div>
       <div class="card"><span>Cached Input</span><strong id="cachedTokens">0</strong></div>
       <div class="card"><span>Reasoning Output</span><strong id="reasoningTokens">0</strong></div>
+      <div class="card"><span>Estimated Cost</span><strong id="estimatedCost">$0.00</strong></div>
     </div>
     <div class="grid">
       <section>
@@ -165,7 +195,7 @@ def _html(payload: str) -> str:
         <table>
           <thead>
             <tr>
-              <th>Time</th><th>Thread</th><th>Model</th><th>Effort</th><th class="num">Last Call</th><th class="num">Cache</th><th class="num">Context</th>
+              <th>Time</th><th>Thread</th><th>Model</th><th>Effort</th><th class="num">Last Call</th><th class="num">Cost</th><th class="num">Cache</th><th class="num">Signals</th>
             </tr>
           </thead>
           <tbody id="rows"></tbody>
@@ -179,7 +209,9 @@ def _html(payload: str) -> str:
   </main>
   <script id="usage-data" type="application/json">{payload}</script>
   <script>
-    const data = JSON.parse(document.getElementById('usage-data').textContent);
+    const payload = JSON.parse(document.getElementById('usage-data').textContent);
+    const data = Array.isArray(payload) ? payload : payload.rows;
+    const pricingConfigured = Boolean(payload.pricing_configured);
     const rowsEl = document.getElementById('rows');
     const detailEl = document.getElementById('detail');
     const searchEl = document.getElementById('search');
@@ -187,6 +219,12 @@ def _html(payload: str) -> str:
     const effortEl = document.getElementById('effort');
     const sortEl = document.getElementById('sort');
     const number = new Intl.NumberFormat();
+    const money = (value, missingLabel = 'No price') => {{
+      if (value === null || value === undefined) return missingLabel;
+      const amount = Number(value) || 0;
+      if (amount > 0 && amount < 0.01) return `$${{amount.toFixed(4)}}`;
+      return `$${{amount.toFixed(2)}}`;
+    }};
     const pct = value => `${{((Number(value) || 0) * 100).toFixed(1)}}%`;
     const short = (value, fallback = 'Unknown') => value || fallback;
     const escapeHtml = value => String(value).replace(/[&<>"']/g, char => ({{
@@ -219,6 +257,7 @@ def _html(payload: str) -> str:
         return (!term || haystack.includes(term)) && (!model || row.model === model) && (!effort || row.effort === effort);
       }});
       rows.sort((a, b) => {{
+        if (sortEl.value === 'cost') return Number(b.estimated_cost_usd || 0) - Number(a.estimated_cost_usd || 0);
         if (sortEl.value === 'time') return String(b.event_timestamp).localeCompare(String(a.event_timestamp));
         if (sortEl.value === 'cache') return Number(a.cache_ratio || 0) - Number(b.cache_ratio || 0);
         if (sortEl.value === 'context') return Number(b.context_window_percent || 0) - Number(a.context_window_percent || 0);
@@ -233,16 +272,20 @@ def _html(payload: str) -> str:
       document.getElementById('totalTokens').textContent = number.format(rows.reduce((sum, row) => sum + Number(row.total_tokens || 0), 0));
       document.getElementById('cachedTokens').textContent = number.format(rows.reduce((sum, row) => sum + Number(row.cached_input_tokens || 0), 0));
       document.getElementById('reasoningTokens').textContent = number.format(rows.reduce((sum, row) => sum + Number(row.reasoning_output_tokens || 0), 0));
+      const estimatedCost = rows.reduce((sum, row) => sum + Number(row.estimated_cost_usd || 0), 0);
+      document.getElementById('estimatedCost').textContent = pricingConfigured ? money(estimatedCost) : 'Not configured';
       for (const row of rows.slice(0, 500)) {{
         const tr = document.createElement('tr');
+        const flags = Array.isArray(row.efficiency_flags) ? row.efficiency_flags : [];
         tr.innerHTML = `
           <td>${{escapeHtml(truncate(row.event_timestamp, 20))}}</td>
           <td title="${{escapeHtml(short(row.session_id))}}">${{escapeHtml(truncate(row.thread_name || row.session_id))}}</td>
           <td><span class="pill">${{escapeHtml(short(row.model))}}</span></td>
           <td>${{escapeHtml(short(row.effort))}}</td>
           <td class="num">${{number.format(row.total_tokens || 0)}}</td>
+          <td class="num">${{escapeHtml(money(row.estimated_cost_usd))}}</td>
           <td class="num">${{pct(row.cache_ratio)}}</td>
-          <td class="num">${{pct(row.context_window_percent)}}</td>
+          <td><div class="flags">${{flags.slice(0, 2).map(flag => `<span class="flag">${{escapeHtml(flag)}}</span>`).join('')}}</div></td>
         `;
         tr.addEventListener('mouseenter', () => showDetail(row));
         rowsEl.appendChild(tr);
@@ -263,6 +306,9 @@ def _html(payload: str) -> str:
         ['Uncached input', number.format(row.uncached_input_tokens || 0)],
         ['Output', number.format(row.output_tokens || 0)],
         ['Reasoning output', number.format(row.reasoning_output_tokens || 0)],
+        ['Estimated cost', money(row.estimated_cost_usd)],
+        ['Estimated cache savings', money(row.estimated_cache_savings_usd)],
+        ['Efficiency signals', Array.isArray(row.efficiency_flags) && row.efficiency_flags.length ? row.efficiency_flags.join(', ') : 'None'],
         ['Session cumulative', number.format(row.cumulative_total_tokens || 0)],
         ['Context window', number.format(row.model_context_window || 0)],
         ['Context use', pct(row.context_window_percent)],

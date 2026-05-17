@@ -8,4 +8,7 @@ from pathlib import Path
 APP_DIR = Path.home() / ".codex-usage-tracker"
 DEFAULT_DB_PATH = APP_DIR / "usage.sqlite3"
 DEFAULT_DASHBOARD_PATH = APP_DIR / "dashboard.html"
+DEFAULT_PRICING_PATH = APP_DIR / "pricing.json"
 DEFAULT_CODEX_HOME = Path.home() / ".codex"
+DEFAULT_PLUGIN_LINK = Path.home() / "plugins" / "codex-usage-tracker"
+DEFAULT_MARKETPLACE_PATH = Path.home() / ".agents" / "plugins" / "marketplace.json"

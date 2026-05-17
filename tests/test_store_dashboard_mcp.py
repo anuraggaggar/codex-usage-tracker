@@ -4,8 +4,11 @@ import json
 from pathlib import Path
 
 from codex_usage_tracker.dashboard import generate_dashboard
+from codex_usage_tracker.diagnostics import run_doctor
+from codex_usage_tracker.pricing import annotate_rows_with_efficiency, load_pricing_config
 from codex_usage_tracker.store import (
     export_usage_csv,
+    query_most_expensive_calls,
     query_session_usage,
     query_summary,
     refresh_usage_index,
@@ -22,22 +25,29 @@ def test_refresh_is_idempotent_and_summary_works(tmp_path: Path) -> None:
     second = refresh_usage_index(codex_home=codex_home, db_path=db_path)
     session_rows = query_session_usage(db_path=db_path, session_id=SESSION_ID)
     summary = query_summary(db_path=db_path, group_by="model")
+    recent_summary = query_summary(db_path=db_path, group_by="model", since="2026-05-17")
+    future_summary = query_summary(db_path=db_path, group_by="model", since="2099-01-01")
+    expensive = query_most_expensive_calls(db_path=db_path, limit=1)
 
     assert first.parsed_events == 2
     assert second.parsed_events == 2
     assert len(session_rows) == 2
     assert summary[0]["group_key"] == "gpt-5.5"
     assert summary[0]["total_tokens"] == 300
+    assert recent_summary[0]["total_tokens"] == 300
+    assert future_summary == []
+    assert expensive[0]["total_tokens"] == 200
 
 
 def test_dashboard_and_csv_are_aggregate_only(tmp_path: Path) -> None:
     codex_home = _make_codex_home(tmp_path)
     db_path = tmp_path / "usage.sqlite3"
+    pricing_path = _write_pricing(tmp_path / "pricing.json")
     refresh_usage_index(codex_home=codex_home, db_path=db_path)
     dashboard_path = tmp_path / "dashboard.html"
     csv_path = tmp_path / "usage.csv"
 
-    generate_dashboard(db_path=db_path, output_path=dashboard_path)
+    generate_dashboard(db_path=db_path, output_path=dashboard_path, pricing_path=pricing_path)
     exported = export_usage_csv(output_path=csv_path, db_path=db_path)
 
     dashboard = dashboard_path.read_text(encoding="utf-8")
@@ -47,6 +57,8 @@ def test_dashboard_and_csv_are_aggregate_only(tmp_path: Path) -> None:
     assert "SECRET RAW PROMPT" not in csv_text
     assert "last call" in dashboard.lower()
     assert "session cumulative" in dashboard.lower()
+    assert "Estimated Cost" in dashboard
+    assert "estimated_cost_usd" in dashboard
 
 
 def test_mcp_wrappers_smoke(tmp_path: Path, monkeypatch) -> None:
@@ -55,19 +67,81 @@ def test_mcp_wrappers_smoke(tmp_path: Path, monkeypatch) -> None:
     codex_home = _make_codex_home(tmp_path)
     db_path = tmp_path / "usage.sqlite3"
     dashboard_path = tmp_path / "dashboard.html"
+    pricing_path = _write_pricing(tmp_path / "pricing.json")
     monkeypatch.setattr(mcp_server, "DEFAULT_CODEX_HOME", codex_home)
     monkeypatch.setattr(mcp_server, "DEFAULT_DB_PATH", db_path)
     monkeypatch.setattr(mcp_server, "DEFAULT_DASHBOARD_PATH", dashboard_path)
+    monkeypatch.setattr(mcp_server, "DEFAULT_PRICING_PATH", pricing_path)
 
     refresh = mcp_server.refresh_usage_index()
     summary = mcp_server.usage_summary(group_by="thread")
+    model_summary = mcp_server.usage_summary(preset="by-model")
+    expensive = mcp_server.most_expensive_usage_calls(limit=1)
     session = mcp_server.session_usage(session_id=SESSION_ID)
     dashboard = mcp_server.generate_usage_dashboard()
+    doctor = mcp_server.usage_doctor()
 
     assert refresh["parsed_events"] == 2
     assert "Add Codex token tracking" in summary
+    assert "estimated cost" in model_summary
+    assert "Most expensive Codex calls" in expensive
     assert SESSION_ID in session
     assert dashboard["dashboard_path"] == str(dashboard_path)
+    assert "Codex Usage Tracker doctor" in doctor
+
+
+def test_pricing_annotation_and_doctor_pass(tmp_path: Path) -> None:
+    codex_home = _make_codex_home(tmp_path)
+    db_path = tmp_path / "usage.sqlite3"
+    dashboard_path = tmp_path / "dashboard.html"
+    pricing_path = _write_pricing(tmp_path / "pricing.json")
+    refresh_usage_index(codex_home=codex_home, db_path=db_path)
+    generate_dashboard(db_path=db_path, output_path=dashboard_path, pricing_path=pricing_path)
+
+    rows = query_most_expensive_calls(db_path=db_path, limit=1)
+    annotated = annotate_rows_with_efficiency(
+        rows, pricing=load_pricing_config(tmp_path / "missing-pricing.json")
+    )
+    assert annotated[0]["estimated_cost_usd"] is None
+    annotated = annotate_rows_with_efficiency(rows, pricing=load_pricing_config(pricing_path))
+    assert annotated[0]["estimated_cost_usd"] > 0
+
+    repo_root = tmp_path / "repo"
+    (repo_root / ".codex-plugin").mkdir(parents=True)
+    (repo_root / ".codex-plugin" / "plugin.json").write_text("{}", encoding="utf-8")
+    (repo_root / ".mcp.json").write_text(
+        json.dumps(
+            {
+                "mcpServers": {
+                    "codex-usage-tracker": {
+                        "command": "/usr/bin/python3",
+                        "args": ["-m", "codex_usage_tracker.mcp_server"],
+                    }
+                }
+            }
+        ),
+        encoding="utf-8",
+    )
+    plugin_link = tmp_path / "plugins" / "codex-usage-tracker"
+    plugin_link.parent.mkdir()
+    plugin_link.symlink_to(repo_root, target_is_directory=True)
+    marketplace_path = tmp_path / "marketplace.json"
+    marketplace_path.write_text(
+        json.dumps({"plugins": [{"name": "codex-usage-tracker"}]}),
+        encoding="utf-8",
+    )
+
+    report = run_doctor(
+        codex_home=codex_home,
+        db_path=db_path,
+        dashboard_path=dashboard_path,
+        pricing_path=pricing_path,
+        plugin_link=plugin_link,
+        marketplace_path=marketplace_path,
+        repo_root=repo_root,
+    )
+
+    assert report["status"] == "pass"
 
 
 def _make_codex_home(tmp_path: Path) -> Path:
@@ -110,6 +184,24 @@ def _make_codex_home(tmp_path: Path) -> Path:
         ],
     )
     return codex_home
+
+
+def _write_pricing(path: Path) -> Path:
+    path.write_text(
+        json.dumps(
+            {
+                "models": {
+                    "gpt-5.5": {
+                        "input_per_million": 2.0,
+                        "cached_input_per_million": 0.5,
+                        "output_per_million": 10.0,
+                    }
+                }
+            }
+        ),
+        encoding="utf-8",
+    )
+    return path
 
 
 def _token_event(cumulative_total: int, last_total: int) -> dict[str, object]:

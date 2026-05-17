@@ -3,18 +3,28 @@
 from __future__ import annotations
 
 import argparse
+import json
 import webbrowser
+from datetime import date, timedelta
 from pathlib import Path
 
 from codex_usage_tracker.dashboard import generate_dashboard
-from codex_usage_tracker.formatting import format_session, format_summary
+from codex_usage_tracker.diagnostics import run_doctor
+from codex_usage_tracker.formatting import format_calls, format_doctor, format_session, format_summary
 from codex_usage_tracker.paths import (
     DEFAULT_CODEX_HOME,
     DEFAULT_DASHBOARD_PATH,
     DEFAULT_DB_PATH,
+    DEFAULT_PRICING_PATH,
+)
+from codex_usage_tracker.pricing import (
+    annotate_rows_with_efficiency,
+    load_pricing_config,
+    write_pricing_template,
 )
 from codex_usage_tracker.store import (
     export_usage_csv,
+    query_most_expensive_calls,
     query_session_usage,
     query_summary,
     refresh_usage_index,
@@ -24,7 +34,11 @@ from codex_usage_tracker.store import (
 def main() -> int:
     parser = argparse.ArgumentParser(prog="codex-usage-tracker")
     parser.add_argument("--db", type=Path, default=DEFAULT_DB_PATH)
+    parser.add_argument("--pricing", type=Path, default=DEFAULT_PRICING_PATH)
     subparsers = parser.add_subparsers(dest="command", required=True)
+
+    doctor = subparsers.add_parser("doctor", help="Check local setup without writing files")
+    doctor.add_argument("--json", action="store_true", dest="as_json")
 
     refresh = subparsers.add_parser("refresh", help="Scan Codex logs into SQLite")
     refresh.add_argument("--codex-home", type=Path, default=DEFAULT_CODEX_HOME)
@@ -36,6 +50,12 @@ def main() -> int:
         choices=["date", "model", "effort", "cwd", "thread", "session"],
         default="thread",
     )
+    summary.add_argument(
+        "--preset",
+        choices=["today", "last-7-days", "by-model", "by-cwd", "by-thread", "expensive"],
+        help="Convenience preset for common summaries",
+    )
+    summary.add_argument("--since", help="Only include calls at or after this ISO date/time")
     summary.add_argument("--limit", type=int, default=20)
 
     session = subparsers.add_parser("session", help="Show one session's usage")
@@ -45,13 +65,45 @@ def main() -> int:
     dashboard = subparsers.add_parser("dashboard", help="Generate static dashboard")
     dashboard.add_argument("--output", type=Path, default=DEFAULT_DASHBOARD_PATH)
     dashboard.add_argument("--limit", type=int, default=5000)
+    dashboard.add_argument("--since", help="Only include calls at or after this ISO date/time")
     dashboard.add_argument("--open", action="store_true")
+
+    open_dashboard = subparsers.add_parser(
+        "open-dashboard", help="Generate the default dashboard and open it"
+    )
+    open_dashboard.add_argument("--output", type=Path, default=DEFAULT_DASHBOARD_PATH)
+    open_dashboard.add_argument("--limit", type=int, default=5000)
+    open_dashboard.add_argument("--since", help="Only include calls at or after this ISO date/time")
+    open_dashboard.add_argument(
+        "--refresh",
+        action="store_true",
+        help="Refresh the SQLite index before generating the dashboard",
+    )
+    open_dashboard.add_argument("--codex-home", type=Path, default=DEFAULT_CODEX_HOME)
+
+    expensive = subparsers.add_parser("expensive", help="Show largest last-call usage rows")
+    expensive.add_argument("--limit", type=int, default=20)
+    expensive.add_argument("--since", help="Only include calls at or after this ISO date/time")
+    expensive.add_argument(
+        "--preset",
+        choices=["today", "last-7-days"],
+        help="Convenience date window",
+    )
 
     export = subparsers.add_parser("export", help="Export aggregate usage CSV")
     export.add_argument("--output", type=Path, required=True)
     export.add_argument("--limit", type=int)
 
+    pricing = subparsers.add_parser("init-pricing", help="Write a local pricing template")
+    pricing.add_argument("--output", type=Path, default=DEFAULT_PRICING_PATH)
+    pricing.add_argument("--force", action="store_true")
+
     args = parser.parse_args()
+
+    if args.command == "doctor":
+        report = run_doctor(db_path=args.db, pricing_path=args.pricing)
+        print(json.dumps(report, indent=2) if args.as_json else format_doctor(report))
+        return 0 if report["status"] != "fail" else 1
 
     if args.command == "refresh":
         result = refresh_usage_index(
@@ -66,7 +118,16 @@ def main() -> int:
         return 0
 
     if args.command == "summary":
-        print(format_summary(query_summary(args.db, args.group_by, args.limit), args.group_by))
+        group_by, since = _resolve_summary_options(args.group_by, args.preset, args.since)
+        pricing = load_pricing_config(args.pricing)
+        if args.preset == "expensive":
+            rows = query_most_expensive_calls(args.db, limit=args.limit, since=since)
+            print(format_calls(annotate_rows_with_efficiency(rows, pricing)))
+            return 0
+        rows = query_summary(args.db, group_by, args.limit, since=since)
+        if group_by == "model":
+            rows = annotate_rows_with_efficiency(rows, pricing, model_field="group_key")
+        print(format_summary(rows, group_by))
         return 0
 
     if args.command == "session":
@@ -74,10 +135,37 @@ def main() -> int:
         return 0
 
     if args.command == "dashboard":
-        output = generate_dashboard(db_path=args.db, output_path=args.output, limit=args.limit)
+        output = generate_dashboard(
+            db_path=args.db,
+            output_path=args.output,
+            limit=args.limit,
+            pricing_path=args.pricing,
+            since=args.since,
+        )
         print(f"Wrote dashboard to {output}")
         if args.open:
             webbrowser.open(output.resolve().as_uri())
+        return 0
+
+    if args.command == "open-dashboard":
+        if args.refresh:
+            refresh_usage_index(codex_home=args.codex_home, db_path=args.db)
+        output = generate_dashboard(
+            db_path=args.db,
+            output_path=args.output,
+            limit=args.limit,
+            pricing_path=args.pricing,
+            since=args.since,
+        )
+        print(f"Opening dashboard at {output}")
+        webbrowser.open(output.resolve().as_uri())
+        return 0
+
+    if args.command == "expensive":
+        since = _resolve_since(args.preset, args.since)
+        pricing = load_pricing_config(args.pricing)
+        rows = query_most_expensive_calls(args.db, limit=args.limit, since=since)
+        print(format_calls(annotate_rows_with_efficiency(rows, pricing)))
         return 0
 
     if args.command == "export":
@@ -85,8 +173,35 @@ def main() -> int:
         print(f"Wrote {count} aggregate usage rows to {args.output}")
         return 0
 
+    if args.command == "init-pricing":
+        output = write_pricing_template(args.output, force=args.force)
+        print(f"Wrote local pricing template to {output}")
+        return 0
+
     parser.error("unknown command")
     return 2
+
+
+def _resolve_summary_options(
+    group_by: str, preset: str | None, since: str | None
+) -> tuple[str, str | None]:
+    if preset == "by-model":
+        group_by = "model"
+    elif preset == "by-cwd":
+        group_by = "cwd"
+    elif preset == "by-thread":
+        group_by = "thread"
+    return group_by, _resolve_since(preset, since)
+
+
+def _resolve_since(preset: str | None, since: str | None) -> str | None:
+    if since:
+        return since
+    if preset == "today":
+        return date.today().isoformat()
+    if preset == "last-7-days":
+        return (date.today() - timedelta(days=6)).isoformat()
+    return None
 
 
 if __name__ == "__main__":

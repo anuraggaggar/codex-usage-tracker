@@ -1,6 +1,6 @@
 {
   "name": "codex-usage-tracker",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Track aggregate Codex token usage from local session logs.",
   "author": {
     "name": "Douglas Monsky"
@@ -32,7 +32,9 @@
     "privacyPolicyURL": "https://github.com/douglasmonsky/codex-usage-tracker",
     "termsOfServiceURL": "https://github.com/douglasmonsky/codex-usage-tracker",
     "defaultPrompt": [
+      "Check my Codex usage tracker setup",
       "Show my Codex token usage summary",
+      "Show my most expensive Codex calls",
       "Generate a Codex usage dashboard",
       "Export my Codex token usage CSV"
     ],

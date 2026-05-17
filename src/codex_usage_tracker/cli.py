@@ -70,6 +70,7 @@ def main() -> int:
             "subagent_type",
             "agent_role",
             "parent_session",
+            "parent_thread",
         ],
         default="thread",
     )

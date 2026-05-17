@@ -86,6 +86,8 @@ def load_call_context(
             "event_timestamp": row.get("event_timestamp"),
             "model": row.get("model"),
             "effort": row.get("effort"),
+            "parent_session_id": row.get("parent_session_id"),
+            "parent_thread_name": row.get("parent_thread_name"),
             "total_tokens": row.get("total_tokens"),
             "cumulative_total_tokens": row.get("cumulative_total_tokens"),
         },

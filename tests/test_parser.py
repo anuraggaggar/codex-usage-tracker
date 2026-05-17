@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+from codex_usage_tracker.models import SessionInfo
 from codex_usage_tracker.parser import (
     find_session_logs,
     load_session_index,
@@ -71,7 +72,16 @@ def test_parser_skips_missing_info_and_duplicate_snapshots(tmp_path: Path) -> No
         ],
     )
 
-    events = parse_usage_events_from_file(log_path, {})
+    events = parse_usage_events_from_file(
+        log_path,
+        {
+            "parent-session": SessionInfo(
+                session_id="parent-session",
+                thread_name="Parent Thread",
+                updated_at="2026-05-17T18:00:00Z",
+            )
+        },
+    )
 
     assert [event.cumulative_total_tokens for event in events] == [100, 150, 210]
     assert [event.total_tokens for event in events] == [100, 50, 60]
@@ -83,6 +93,8 @@ def test_parser_skips_missing_info_and_duplicate_snapshots(tmp_path: Path) -> No
     assert events[0].agent_role == "test_runner"
     assert events[0].agent_nickname == "Verifier"
     assert events[0].parent_session_id == "parent-session"
+    assert events[0].parent_thread_name == "Parent Thread"
+    assert events[0].parent_session_updated_at == "2026-05-17T18:00:00Z"
     assert all("SECRET" not in str(event.to_row()) for event in events)
 
 

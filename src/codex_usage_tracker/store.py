@@ -37,6 +37,8 @@ EVENT_COLUMNS = [
     "agent_role",
     "agent_nickname",
     "parent_session_id",
+    "parent_thread_name",
+    "parent_session_updated_at",
     "model_context_window",
     "input_tokens",
     "cached_input_tokens",
@@ -104,6 +106,8 @@ def init_db(conn: sqlite3.Connection) -> None:
             agent_role TEXT,
             agent_nickname TEXT,
             parent_session_id TEXT,
+            parent_thread_name TEXT,
+            parent_session_updated_at TEXT,
             model_context_window INTEGER,
             input_tokens INTEGER NOT NULL,
             cached_input_tokens INTEGER NOT NULL,
@@ -140,6 +144,8 @@ def init_db(conn: sqlite3.Connection) -> None:
             "agent_role": "TEXT",
             "agent_nickname": "TEXT",
             "parent_session_id": "TEXT",
+            "parent_thread_name": "TEXT",
+            "parent_session_updated_at": "TEXT",
         },
     )
 
@@ -151,7 +157,11 @@ def _ensure_columns(conn: sqlite3.Connection, columns: dict[str, str]) -> None:
     }
     for column, column_type in columns.items():
         if column not in existing:
-            conn.execute(f"ALTER TABLE usage_events ADD COLUMN {column} {column_type}")
+            try:
+                conn.execute(f"ALTER TABLE usage_events ADD COLUMN {column} {column_type}")
+            except sqlite3.OperationalError as exc:
+                if "duplicate column name" not in str(exc).lower():
+                    raise
 
 
 def upsert_usage_events(
@@ -276,10 +286,29 @@ def query_dashboard_events(
         init_db(conn)
         rows = conn.execute(
             f"""
-            SELECT *
+            SELECT
+                usage_events.*,
+                coalesce(
+                    usage_events.parent_thread_name,
+                    parent_threads.thread_name
+                ) AS resolved_parent_thread_name,
+                coalesce(
+                    usage_events.parent_session_updated_at,
+                    parent_threads.session_updated_at
+                ) AS resolved_parent_session_updated_at
             FROM usage_events
+            LEFT JOIN (
+                SELECT
+                    session_id,
+                    max(thread_name) AS thread_name,
+                    max(session_updated_at) AS session_updated_at
+                FROM usage_events
+                WHERE thread_name IS NOT NULL
+                GROUP BY session_id
+            ) AS parent_threads
+            ON usage_events.parent_session_id = parent_threads.session_id
             {where_clause}
-            ORDER BY event_timestamp DESC, cumulative_total_tokens DESC
+            ORDER BY usage_events.event_timestamp DESC, usage_events.cumulative_total_tokens DESC
             LIMIT ?
             """,
             (*params, limit),
@@ -335,12 +364,13 @@ def _group_expression(group_by: str) -> str:
         "model": "coalesce(model, 'Unknown model')",
         "effort": "coalesce(effort, 'Unknown effort')",
         "cwd": "coalesce(cwd, 'Unknown cwd')",
-        "thread": "coalesce(thread_name, session_id)",
+        "thread": "coalesce(thread_name, parent_thread_name, session_id)",
         "session": "session_id",
         "thread_source": "coalesce(thread_source, 'user')",
         "subagent_type": "coalesce(subagent_type, 'not subagent')",
         "agent_role": "coalesce(agent_role, 'not agent role')",
         "parent_session": "coalesce(parent_session_id, 'no parent session')",
+        "parent_thread": "coalesce(parent_thread_name, 'no parent thread')",
     }
     try:
         return mapping[group_by]

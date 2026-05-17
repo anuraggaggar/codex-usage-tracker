@@ -77,7 +77,7 @@ def usage_summary(
     preset: str | None = None,
     since: str | None = None,
 ) -> str:
-    """Summarize aggregate Codex token usage by date, model, effort, cwd, thread, session, or subagent metadata."""
+    """Summarize aggregate Codex token usage by date, model, effort, cwd, thread, session, parent thread, or subagent metadata."""
 
     group_by, since_filter = _resolve_summary_options(group_by, preset, since)
     pricing = load_pricing_config(DEFAULT_PRICING_PATH)

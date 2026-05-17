@@ -97,7 +97,7 @@ def parse_usage_events_from_file(
                 if not session_id:
                     session_id = _optional_str(payload.get("id"))
                     session_info = index.get(session_id or "")
-                session_meta = _session_metadata(payload)
+                session_meta = _session_metadata(payload, index)
                 continue
 
             if entry_type == "turn_context":
@@ -193,6 +193,8 @@ def _build_event(
         agent_role=session_meta.get("agent_role"),
         agent_nickname=session_meta.get("agent_nickname"),
         parent_session_id=session_meta.get("parent_session_id"),
+        parent_thread_name=session_meta.get("parent_thread_name"),
+        parent_session_updated_at=session_meta.get("parent_session_updated_at"),
         model_context_window=model_context_window,
         input_tokens=input_tokens,
         cached_input_tokens=cached_input_tokens,
@@ -209,7 +211,10 @@ def _build_event(
     )
 
 
-def _session_metadata(payload: dict[str, Any]) -> dict[str, str | None]:
+def _session_metadata(
+    payload: dict[str, Any],
+    session_index: dict[str, SessionInfo],
+) -> dict[str, str | None]:
     source = payload.get("source")
     metadata: dict[str, str | None] = {
         "thread_source": _optional_str(payload.get("thread_source")),
@@ -217,6 +222,8 @@ def _session_metadata(payload: dict[str, Any]) -> dict[str, str | None]:
         "agent_role": None,
         "agent_nickname": None,
         "parent_session_id": None,
+        "parent_thread_name": None,
+        "parent_session_updated_at": None,
     }
     if not isinstance(source, dict):
         return metadata
@@ -235,9 +242,13 @@ def _session_metadata(payload: dict[str, Any]) -> dict[str, str | None]:
         metadata["subagent_type"] = "thread_spawn"
         metadata["agent_role"] = _optional_str(thread_spawn.get("agent_role"))
         metadata["agent_nickname"] = _optional_str(thread_spawn.get("agent_nickname"))
-        metadata["parent_session_id"] = _optional_str(
-            thread_spawn.get("parent_thread_id")
-        )
+        parent_session_id = _optional_str(thread_spawn.get("parent_thread_id"))
+        metadata["parent_session_id"] = parent_session_id
+        if parent_session_id:
+            parent_info = session_index.get(parent_session_id)
+            if parent_info:
+                metadata["parent_thread_name"] = parent_info.thread_name
+                metadata["parent_session_updated_at"] = parent_info.updated_at
     return metadata
 
 

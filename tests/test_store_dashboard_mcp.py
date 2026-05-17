@@ -35,7 +35,9 @@ def test_refresh_is_idempotent_and_summary_works(tmp_path: Path) -> None:
     recent_summary = query_summary(db_path=db_path, group_by="model", since="2026-05-17")
     future_summary = query_summary(db_path=db_path, group_by="model", since="2099-01-01")
     subagent_summary = query_summary(db_path=db_path, group_by="agent_role")
+    thread_summary = query_summary(db_path=db_path, group_by="thread")
     expensive = query_most_expensive_calls(db_path=db_path, limit=1)
+    subagent_rows = query_session_usage(db_path=db_path, session_id=SECOND_SESSION_ID)
 
     assert first.parsed_events == 4
     assert second.parsed_events == 4
@@ -45,6 +47,10 @@ def test_refresh_is_idempotent_and_summary_works(tmp_path: Path) -> None:
     assert recent_summary[0]["total_tokens"] == 350
     assert future_summary == []
     assert {row["group_key"] for row in subagent_summary} >= {"test_runner", "not agent role"}
+    assert thread_summary[0]["group_key"] == "Add Codex token tracking"
+    assert thread_summary[0]["total_tokens"] == 350
+    assert subagent_rows[0]["parent_thread_name"] == "Add Codex token tracking"
+    assert subagent_rows[0]["parent_session_updated_at"] == "2026-05-17T18:58:27Z"
     assert expensive[0]["total_tokens"] == 200
 
 
@@ -76,6 +82,8 @@ def test_dashboard_and_csv_are_aggregate_only(tmp_path: Path) -> None:
     assert "Subagent type" in dashboard
     assert "Auto-review" in dashboard
     assert "Load context" in dashboard
+    assert "parent_thread_name" in dashboard
+    assert "explicit parent thread" in dashboard
     assert 'data-sort-key="time"' in dashboard
     assert 'data-sort-key="thread"' in dashboard
     assert '<option value="time" selected>Newest calls</option>' in dashboard

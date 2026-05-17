@@ -34,7 +34,12 @@ def format_session(rows: list[dict[str, Any]]) -> str:
         return "No usage records found for that session."
 
     first = rows[0]
-    thread = first.get("thread_name") or first.get("session_id")
+    thread = (
+        first.get("thread_name")
+        or first.get("parent_thread_name")
+        or first.get("resolved_parent_thread_name")
+        or first.get("session_id")
+    )
     lines = [
         f"Codex session usage: {thread}",
         f"Session: {first.get('session_id')}",
@@ -59,7 +64,13 @@ def format_calls(rows: list[dict[str, Any]], title: str = "Most expensive Codex 
 
     lines = [title, ""]
     for index, row in enumerate(rows, 1):
-        thread = row.get("thread_name") or row.get("session_id") or "Unknown"
+        thread = (
+            row.get("thread_name")
+            or row.get("parent_thread_name")
+            or row.get("resolved_parent_thread_name")
+            or row.get("session_id")
+            or "Unknown"
+        )
         flags = row.get("efficiency_flags") or []
         flag_suffix = f" | flags: {', '.join(flags)}" if flags else ""
         cost = _cost_suffix(row, prefix=" | estimated cost ")

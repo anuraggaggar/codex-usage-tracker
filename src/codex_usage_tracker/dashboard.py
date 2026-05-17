@@ -559,6 +559,8 @@ def _html(payload: str) -> str:
           row.agent_role,
           row.agent_nickname,
           row.parent_session_id,
+          row.parent_thread_name,
+          row.resolved_parent_thread_name,
         ].join(' ').toLowerCase();
         const statusMatches = !pricingStatus
           || (pricingStatus === 'official' && row.pricing_model && !row.pricing_estimated)
@@ -645,9 +647,24 @@ def _html(payload: str) -> str:
       if (isSubagent(row)) return 'Subagent';
       return 'User';
     }}
+    function resolvedParentThreadName(row) {{
+      return row.resolved_parent_thread_name || row.parent_thread_name || '';
+    }}
+    function resolvedParentSessionUpdatedAt(row) {{
+      return row.resolved_parent_session_updated_at || row.parent_session_updated_at || '';
+    }}
     function resolveThreadAttachment(row) {{
       if (row.thread_name) {{
         return {{ key: `thread:${{row.thread_name}}`, label: row.thread_name, relation: 'direct' }};
+      }}
+      const parentThreadName = resolvedParentThreadName(row);
+      if (row.parent_session_id && parentThreadName) {{
+        return {{
+          key: `thread:${{parentThreadName}}`,
+          label: parentThreadName,
+          relation: 'explicit parent thread',
+          parentSessionId: row.parent_session_id,
+        }};
       }}
       if (row.parent_session_id && parentCandidates.bySession.has(row.parent_session_id)) {{
         const parent = parentCandidates.bySession.get(row.parent_session_id);
@@ -988,6 +1005,8 @@ def _html(payload: str) -> str:
         ['Agent role', row.agent_role || 'None'],
         ['Agent nickname', row.agent_nickname || 'None'],
         ['Parent session', row.parent_session_id || 'None'],
+        ['Parent thread', resolvedParentThreadName(row) || 'None'],
+        ['Parent updated', resolvedParentSessionUpdatedAt(row) || 'None'],
         ['Turn', row.turn_id],
         ['Timestamp', row.event_timestamp],
         ['Model', row.model],

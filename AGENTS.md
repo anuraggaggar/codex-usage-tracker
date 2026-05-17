@@ -50,7 +50,7 @@ codex-usage-tracker expensive --limit 5
 - Never commit real Codex session logs.
 - Never store raw prompts, assistant text, tool outputs, pasted secrets, or message snippets.
 - Raw context may be read only on demand from original local JSONL files; never persist it to SQLite, CSV, generated HTML, fixtures based on real logs, or commits.
-- Store only selected aggregate session metadata for subagents; do not persist raw session instructions or source JSON.
+- Store only selected aggregate session metadata for subagents, including parent thread labels; do not persist raw session instructions or source JSON.
 - Keep fixture data synthetic.
 - Keep local SQLite databases, CSV exports, HTML dashboards, caches, and virtualenvs out of git.
 - Do not hard-code real current model pricing in source; refresh the local config from OpenAI's published pricing docs or use manual local overrides. Internal Codex model estimates must be explicitly marked as estimates with source and rationale metadata.
@@ -65,5 +65,5 @@ codex-usage-tracker expensive --limit 5
 - Pricing coverage clearly separates configured, estimated, and unpriced model usage.
 - Dashboard Calls and Threads views share filters, totals, and aggregate-only hover details.
 - Dashboard context loading is lazy, localhost-only, explicit, redacted, and not embedded in the static HTML payload.
-- Subagent calls preserve logged parent-session metadata, and auto-review attachment is clearly marked when inferred.
+- Subagent calls preserve logged parent-session metadata, latch to parent thread labels when available, and auto-review attachment is clearly marked when inferred.
 - Tests and compile checks pass.

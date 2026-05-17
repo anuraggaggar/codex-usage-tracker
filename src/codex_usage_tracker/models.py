@@ -37,6 +37,8 @@ class UsageEvent:
     agent_role: str | None
     agent_nickname: str | None
     parent_session_id: str | None
+    parent_thread_name: str | None
+    parent_session_updated_at: str | None
     model_context_window: int | None
     input_tokens: int
     cached_input_tokens: int

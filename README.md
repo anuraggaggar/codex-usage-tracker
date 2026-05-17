@@ -46,7 +46,7 @@ codex-usage-tracker dashboard --open
 codex-usage-tracker open-dashboard
 ```
 
-The dashboard opens in the flat Calls view sorted newest-first. Use the Calls/Threads toggle to group filtered usage by thread, with the most recently active thread at the top by default. Click a column header such as Time, Thread, Model, Effort, Tokens, Cost, Cache, or Signals to sort that view; clicking the same header toggles direction. Click a thread row to expand its calls in chronological order. Spawned subagents with a logged parent session are attached to that parent thread. Guardian `codex-auto-review` sessions do not currently log a parent session id, so the dashboard attaches them to the nearest named thread with the same cwd and marks that attachment as inferred.
+The dashboard opens in the flat Calls view sorted newest-first. Use the Calls/Threads toggle to group filtered usage by thread, with the most recently active thread at the top by default. Click a column header such as Time, Thread, Model, Effort, Tokens, Cost, Cache, or Signals to sort that view; clicking the same header toggles direction. Click a thread row to expand its calls in chronological order. Spawned subagents with a logged parent session are latched to the parent thread from `session_index.jsonl`, and the dashboard falls back to an in-database parent-session lookup when needed. Guardian `codex-auto-review` sessions do not currently log a parent session id, so the dashboard attaches them to the nearest named thread with the same cwd and marks that attachment as inferred.
 
 Serve the dashboard with lazy raw-context loading:
 
@@ -136,7 +136,7 @@ The SQLite database is stored at `~/.codex-usage-tracker/usage.sqlite3` by defau
 - session id, thread name, cwd, source file, turn id, timestamps
 - model, reasoning effort, context window
 - token counts and derived efficiency ratios
-- subagent source, role, nickname, and parent session id when present
+- subagent source, role, nickname, parent session id, and parent thread name when present
 
 Raw chat text and tool outputs are ignored by the parser and are never written to the tracker database, CSV exports, or generated dashboard HTML. `usage_call_context`, `codex-usage-tracker context`, and the `serve-dashboard` context endpoint read a single source JSONL file only when explicitly requested, redact common secret patterns, and cap returned text size.
 

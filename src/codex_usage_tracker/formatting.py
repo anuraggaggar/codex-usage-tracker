@@ -119,4 +119,5 @@ def _fmt_money(value: object) -> str:
 def _cost_suffix(row: dict[str, Any], prefix: str = ", estimated cost ") -> str:
     if row.get("estimated_cost_usd") is None:
         return ""
-    return f"{prefix}{_fmt_money(row.get('estimated_cost_usd'))}"
+    marker = "*" if row.get("pricing_estimated") else ""
+    return f"{prefix}{_fmt_money(row.get('estimated_cost_usd'))}{marker}"

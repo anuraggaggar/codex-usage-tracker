@@ -212,13 +212,18 @@ def _write_pricing(path: Path) -> Path:
     return path
 
 
-def _fake_pricing_update(path: Path, tier: str = "standard") -> PricingUpdateResult:
+def _fake_pricing_update(
+    path: Path,
+    tier: str = "standard",
+    include_estimates: bool = True,
+) -> PricingUpdateResult:
     return PricingUpdateResult(
         path=path,
         source_url="https://example.test/pricing.md",
         tier=tier,
         fetched_at="2026-05-17T00:00:00+00:00",
         model_count=1,
+        estimated_model_count=1 if include_estimates else 0,
         backup_path=None,
     )
 

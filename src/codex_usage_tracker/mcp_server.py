@@ -139,16 +139,23 @@ def init_usage_pricing_config(force: bool = False) -> dict[str, Any]:
 
 
 @mcp.tool()
-def update_usage_pricing_config(tier: str = "standard") -> dict[str, Any]:
+def update_usage_pricing_config(
+    tier: str = "standard", include_estimates: bool = True
+) -> dict[str, Any]:
     """Fetch OpenAI-published text-token pricing into the local pricing config."""
 
-    result = update_pricing_from_openai_docs(DEFAULT_PRICING_PATH, tier=tier)
+    result = update_pricing_from_openai_docs(
+        DEFAULT_PRICING_PATH,
+        tier=tier,
+        include_estimates=include_estimates,
+    )
     return {
         "pricing_path": str(result.path),
         "source_url": result.source_url,
         "tier": result.tier,
         "fetched_at": result.fetched_at,
         "model_count": result.model_count,
+        "estimated_model_count": result.estimated_model_count,
         "backup_path": str(result.backup_path) if result.backup_path else None,
     }
 

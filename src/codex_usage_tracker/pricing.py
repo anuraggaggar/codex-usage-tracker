@@ -15,8 +15,23 @@ from urllib.request import Request, urlopen
 from codex_usage_tracker.paths import DEFAULT_PRICING_PATH
 
 OPENAI_PRICING_MD_URL = "https://developers.openai.com/api/docs/pricing.md"
+OPENAI_CODEX_LAUNCH_URL = "https://openai.com/index/introducing-codex/"
 PRICING_SCHEMA = "codex-usage-tracker-pricing-v1"
 VALID_PRICING_TIERS = ("standard", "batch", "flex", "priority")
+ESTIMATED_MODEL_PRICES = {
+    "codex-auto-review": {
+        "input_per_million": 1.5,
+        "cached_input_per_million": 0.375,
+        "output_per_million": 6.0,
+        "estimated": True,
+        "estimate_basis_model": "codex-mini-latest",
+        "estimate_source_url": OPENAI_CODEX_LAUNCH_URL,
+        "estimate_reason": (
+            "codex-auto-review is an internal Codex model label without a public "
+            "pricing row; estimate uses OpenAI-published codex-mini-latest rates."
+        ),
+    }
+}
 
 PRICING_TEMPLATE = {
     "_comment": (
@@ -31,6 +46,9 @@ PRICING_TEMPLATE = {
             "output_per_million": 0.0,
         }
     },
+    "aliases": {
+        "local-codex-model-label": "official-openai-model-id",
+    },
 }
 
 
@@ -41,13 +59,35 @@ class PricingConfig:
     path: Path
     models: dict[str, dict[str, float]]
     loaded: bool
+    aliases: dict[str, str] | None = None
+    estimated_models: set[str] | None = None
     source: dict[str, Any] | None = None
     error: str | None = None
 
     def rates_for(self, model: object) -> dict[str, float] | None:
         if not isinstance(model, str) or not model:
             return None
-        return self.models.get(model)
+        direct = self.models.get(model)
+        if direct is not None:
+            return direct
+        alias_target = (self.aliases or {}).get(model)
+        if not alias_target:
+            return None
+        return self.models.get(alias_target)
+
+    def priced_as(self, model: object) -> str | None:
+        if not isinstance(model, str) or not model:
+            return None
+        if model in self.models:
+            return model
+        alias_target = (self.aliases or {}).get(model)
+        if alias_target and alias_target in self.models:
+            return alias_target
+        return None
+
+    def is_estimated_model(self, model: object) -> bool:
+        priced_as = self.priced_as(model)
+        return bool(priced_as and priced_as in (self.estimated_models or set()))
 
 
 def load_pricing_config(path: Path = DEFAULT_PRICING_PATH) -> PricingConfig:
@@ -61,10 +101,13 @@ def load_pricing_config(path: Path = DEFAULT_PRICING_PATH) -> PricingConfig:
     except (OSError, ValueError, TypeError, json.JSONDecodeError) as exc:
         return PricingConfig(path=path, models={}, loaded=False, error=str(exc))
     source = raw.get("_source") if isinstance(raw, dict) else None
+    aliases = _parse_aliases(raw)
     return PricingConfig(
         path=path,
         models=models,
         loaded=True,
+        aliases=aliases,
+        estimated_models=_parse_estimated_models(raw),
         source=source if isinstance(source, dict) else None,
     )
 
@@ -78,6 +121,7 @@ class PricingUpdateResult:
     tier: str
     fetched_at: str
     model_count: int
+    estimated_model_count: int = 0
     backup_path: Path | None = None
 
 
@@ -97,6 +141,7 @@ def update_pricing_from_openai_docs(
     tier: str = "standard",
     source_url: str = OPENAI_PRICING_MD_URL,
     fetch_text: Callable[[str], str] | None = None,
+    include_estimates: bool = True,
 ) -> PricingUpdateResult:
     """Fetch OpenAI-published pricing rows and cache them in the local config."""
 
@@ -111,6 +156,11 @@ def update_pricing_from_openai_docs(
         raise ValueError(
             f"no text-token pricing rows were parsed from {source_url} for tier {tier}"
         )
+    aliases = _load_existing_aliases(path)
+    estimated_model_count = 0
+    if include_estimates:
+        models.update(_estimated_model_prices())
+        estimated_model_count = len(ESTIMATED_MODEL_PRICES)
 
     fetched_at = datetime.now(UTC).replace(microsecond=0).isoformat()
     payload = {
@@ -121,9 +171,13 @@ def update_pricing_from_openai_docs(
             "tier": tier,
             "fetched_at": fetched_at,
             "model_count": len(models),
+            "official_model_count": len(models) - estimated_model_count,
+            "estimated_model_count": estimated_model_count,
         },
         "models": models,
     }
+    if aliases:
+        payload["aliases"] = aliases
     path.parent.mkdir(parents=True, exist_ok=True)
     backup_path = _backup_existing_pricing(path)
     tmp_path = path.with_name(f"{path.name}.tmp")
@@ -135,6 +189,7 @@ def update_pricing_from_openai_docs(
         tier=tier,
         fetched_at=fetched_at,
         model_count=len(models),
+        estimated_model_count=estimated_model_count,
         backup_path=backup_path,
     )
 
@@ -167,6 +222,67 @@ def parse_openai_pricing_markdown(
     return models
 
 
+def summarize_pricing_coverage(
+    rows: list[dict[str, Any]],
+    pricing: PricingConfig | None = None,
+    *,
+    model_field: str = "group_key",
+) -> dict[str, Any]:
+    """Summarize which aggregate model rows have usable local pricing."""
+
+    config = pricing or load_pricing_config()
+    coverage_rows: list[dict[str, Any]] = []
+    totals = {
+        "model_count": 0,
+        "priced_model_count": 0,
+        "unpriced_model_count": 0,
+        "total_tokens": 0.0,
+        "priced_tokens": 0.0,
+        "unpriced_tokens": 0.0,
+        "estimated_cost_usd": 0.0,
+    }
+
+    for row in rows:
+        model = row.get(model_field)
+        priced_as = config.priced_as(model)
+        copy = dict(row)
+        copy["model"] = model
+        copy["priced"] = priced_as is not None
+        copy["priced_as"] = priced_as
+        copy["pricing_estimated"] = config.is_estimated_model(model)
+        copy["estimated_cost_usd"] = estimate_cost_usd(copy, config, model=model)
+        total_tokens = _number(copy.get("total_tokens"))
+        totals["model_count"] += 1
+        totals["total_tokens"] += total_tokens
+        if priced_as:
+            totals["priced_model_count"] += 1
+            totals["priced_tokens"] += total_tokens
+        else:
+            totals["unpriced_model_count"] += 1
+            totals["unpriced_tokens"] += total_tokens
+        if isinstance(copy["estimated_cost_usd"], int | float):
+            totals["estimated_cost_usd"] += float(copy["estimated_cost_usd"])
+        coverage_rows.append(copy)
+
+    total_tokens = totals["total_tokens"]
+    totals["priced_token_ratio"] = (
+        totals["priced_tokens"] / total_tokens if total_tokens else 0.0
+    )
+    coverage_rows.sort(
+        key=lambda row: (
+            0 if row.get("priced") is False else 1,
+            -_number(row.get("total_tokens")),
+        )
+    )
+    return {
+        **totals,
+        "pricing_loaded": config.loaded and not config.error,
+        "pricing_path": str(config.path),
+        "pricing_source": config.source,
+        "rows": coverage_rows,
+    }
+
+
 def annotate_rows_with_efficiency(
     rows: list[dict[str, Any]],
     pricing: PricingConfig | None = None,
@@ -184,6 +300,8 @@ def annotate_rows_with_efficiency(
         savings = estimate_cache_savings_usd(copy, config, model=model)
         copy["estimated_cost_usd"] = cost
         copy["estimated_cache_savings_usd"] = savings
+        copy["pricing_model"] = config.priced_as(model)
+        copy["pricing_estimated"] = config.is_estimated_model(model)
         copy["efficiency_flags"] = efficiency_flags(copy)
         annotated.append(copy)
     return annotated
@@ -287,6 +405,36 @@ def _parse_models(raw: object) -> dict[str, dict[str, float]]:
     return models
 
 
+def _parse_aliases(raw: object) -> dict[str, str]:
+    if not isinstance(raw, dict):
+        return {}
+    aliases = raw.get("aliases")
+    if not isinstance(aliases, dict):
+        return {}
+    parsed: dict[str, str] = {}
+    for source, target in aliases.items():
+        if isinstance(source, str) and isinstance(target, str) and source and target:
+            parsed[source] = target
+    return parsed
+
+
+def _parse_estimated_models(raw: object) -> set[str]:
+    if not isinstance(raw, dict):
+        return set()
+    model_payload = raw.get("models", raw)
+    if not isinstance(model_payload, dict):
+        return set()
+    return {
+        model
+        for model, rates in model_payload.items()
+        if isinstance(model, str) and isinstance(rates, dict) and rates.get("estimated") is True
+    }
+
+
+def _estimated_model_prices() -> dict[str, dict[str, float | bool | str]]:
+    return {model: dict(rates) for model, rates in ESTIMATED_MODEL_PRICES.items()}
+
+
 _OPENAI_PRICE_ROW_RE = re.compile(
     r"""\[
         \s*"(?P<model>[^"]+)"\s*,
@@ -320,6 +468,15 @@ def _backup_existing_pricing(path: Path) -> Path | None:
     backup_path = path.with_name(f"{path.name}.{stamp}.bak")
     shutil.copy2(path, backup_path)
     return backup_path
+
+
+def _load_existing_aliases(path: Path) -> dict[str, str]:
+    if not path.exists():
+        return {}
+    try:
+        return _parse_aliases(json.loads(path.read_text(encoding="utf-8")))
+    except (OSError, TypeError, json.JSONDecodeError):
+        return {}
 
 
 def _extract_text_token_rows_block(markdown: str, tier: str) -> str:

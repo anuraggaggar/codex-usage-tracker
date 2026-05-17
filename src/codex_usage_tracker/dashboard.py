@@ -261,7 +261,7 @@ def _html(payload: str) -> str:
         pricingSource.tier ? `${{pricingSource.tier}} tier` : '',
         pricingSource.fetched_at ? `fetched ${{pricingSource.fetched_at}}` : '',
       ].filter(Boolean);
-      document.getElementById('pricingSource').textContent = `Estimated costs use ${{sourceParts.join(', ')}}.`;
+      document.getElementById('pricingSource').textContent = `Estimated costs use ${{sourceParts.join(', ')}}; internal Codex labels may use marked best-guess estimates.`;
     }}
     function filtered() {{
       const term = searchEl.value.trim().toLowerCase();
@@ -298,7 +298,7 @@ def _html(payload: str) -> str:
           <td><span class="pill">${{escapeHtml(short(row.model))}}</span></td>
           <td>${{escapeHtml(short(row.effort))}}</td>
           <td class="num">${{number.format(row.total_tokens || 0)}}</td>
-          <td class="num">${{escapeHtml(money(row.estimated_cost_usd))}}</td>
+          <td class="num">${{escapeHtml(row.pricing_estimated ? `${{money(row.estimated_cost_usd)}}*` : money(row.estimated_cost_usd))}}</td>
           <td class="num">${{pct(row.cache_ratio)}}</td>
           <td><div class="flags">${{flags.slice(0, 2).map(flag => `<span class="flag">${{escapeHtml(flag)}}</span>`).join('')}}</div></td>
         `;
@@ -322,6 +322,8 @@ def _html(payload: str) -> str:
         ['Output', number.format(row.output_tokens || 0)],
         ['Reasoning output', number.format(row.reasoning_output_tokens || 0)],
         ['Estimated cost', money(row.estimated_cost_usd)],
+        ['Pricing model', row.pricing_model || 'No configured price'],
+        ['Pricing status', row.pricing_estimated ? 'Best-guess estimate' : row.pricing_model ? 'Configured price' : 'No configured price'],
         ['Estimated cache savings', money(row.estimated_cache_savings_usd)],
         ['Efficiency signals', Array.isArray(row.efficiency_flags) && row.efficiency_flags.length ? row.efficiency_flags.join(', ') : 'None'],
         ['Session cumulative', number.format(row.cumulative_total_tokens || 0)],

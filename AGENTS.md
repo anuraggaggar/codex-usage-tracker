@@ -46,7 +46,7 @@ codex-usage-tracker expensive --limit 5
 - Never store raw prompts, assistant text, tool outputs, pasted secrets, or message snippets.
 - Keep fixture data synthetic.
 - Keep local SQLite databases, CSV exports, HTML dashboards, caches, and virtualenvs out of git.
-- Do not hard-code real current model pricing in source; refresh the local config from OpenAI's published pricing docs or use manual local overrides.
+- Do not hard-code real current model pricing in source; refresh the local config from OpenAI's published pricing docs or use manual local overrides. Internal Codex model estimates must be explicitly marked as estimates with source and rationale metadata.
 
 ## Definition Of Done
 

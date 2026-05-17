@@ -108,6 +108,11 @@ def main() -> int:
     update_pricing.add_argument("--source", choices=["openai-docs"], default="openai-docs")
     update_pricing.add_argument("--tier", choices=VALID_PRICING_TIERS, default="standard")
     update_pricing.add_argument("--source-url", default=OPENAI_PRICING_MD_URL)
+    update_pricing.add_argument(
+        "--no-estimates",
+        action="store_true",
+        help="Skip estimated prices for internal Codex model labels.",
+    )
 
     args = parser.parse_args()
 
@@ -195,10 +200,17 @@ def main() -> int:
             output,
             tier=args.tier,
             source_url=args.source_url,
+            include_estimates=not args.no_estimates,
+        )
+        estimate_suffix = (
+            f", including {result.estimated_model_count} estimated internal model"
+            f"{'' if result.estimated_model_count == 1 else 's'}"
+            if result.estimated_model_count
+            else ""
         )
         print(
             f"Wrote {result.model_count} {result.tier} pricing entries from "
-            f"{result.source_url} to {result.path}"
+            f"{result.source_url} to {result.path}{estimate_suffix}"
             + (f" (backup: {result.backup_path})" if result.backup_path else "")
         )
         return 0

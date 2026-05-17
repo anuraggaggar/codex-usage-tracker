@@ -66,19 +66,22 @@ def test_update_pricing_from_openai_docs_writes_source_metadata(tmp_path: Path) 
     raw = json.loads(pricing_path.read_text(encoding="utf-8"))
     config = load_pricing_config(pricing_path)
 
-    assert result.model_count == 4
-    assert result.estimated_model_count == 1
+    assert result.model_count == 5
+    assert result.estimated_model_count == 2
     assert result.source_url == OPENAI_PRICING_MD_URL
     assert raw["_schema"] == PRICING_SCHEMA
     assert raw["_source"]["url"] == OPENAI_PRICING_MD_URL
     assert raw["_source"]["tier"] == "standard"
-    assert raw["_source"]["estimated_model_count"] == 1
+    assert raw["_source"]["estimated_model_count"] == 2
     assert raw["models"]["codex-auto-review"] == ESTIMATED_MODEL_PRICES["codex-auto-review"]
+    assert raw["models"]["gpt-5.3-codex-spark"] == ESTIMATED_MODEL_PRICES["gpt-5.3-codex-spark"]
     assert config.loaded
     assert config.source and config.source["name"] == "OpenAI Developers pricing docs"
     assert config.models["gpt-5.5"]["output_per_million"] == 30
     assert config.models["codex-auto-review"]["input_per_million"] == 1.5
     assert config.is_estimated_model("codex-auto-review")
+    assert config.models["gpt-5.3-codex-spark"]["input_per_million"] == 1.75
+    assert config.is_estimated_model("gpt-5.3-codex-spark")
 
 
 def test_update_pricing_from_openai_docs_can_skip_estimates(tmp_path: Path) -> None:
@@ -94,6 +97,7 @@ def test_update_pricing_from_openai_docs_can_skip_estimates(tmp_path: Path) -> N
     assert result.model_count == 3
     assert result.estimated_model_count == 0
     assert "codex-auto-review" not in raw["models"]
+    assert "gpt-5.3-codex-spark" not in raw["models"]
 
 
 def test_pricing_coverage_marks_internal_estimates(tmp_path: Path) -> None:
@@ -111,12 +115,23 @@ def test_pricing_coverage_marks_internal_estimates(tmp_path: Path) -> None:
                 "cached_input_tokens": 500_000,
                 "uncached_input_tokens": 500_000,
                 "output_tokens": 1_000_000,
-            }
+            },
+            {
+                "group_key": "gpt-5.3-codex-spark",
+                "total_tokens": 2_000_000,
+                "input_tokens": 1_000_000,
+                "cached_input_tokens": 500_000,
+                "uncached_input_tokens": 500_000,
+                "output_tokens": 1_000_000,
+            },
         ],
         pricing=load_pricing_config(pricing_path),
     )
 
-    assert coverage["priced_model_count"] == 1
-    assert coverage["estimated_cost_usd"] == 6.9375
-    assert coverage["rows"][0]["pricing_estimated"] is True
-    assert coverage["rows"][0]["priced_as"] == "codex-auto-review"
+    assert coverage["priced_model_count"] == 2
+    assert coverage["estimated_cost_usd"] == 21.9
+    assert all(row["pricing_estimated"] is True for row in coverage["rows"])
+    assert {row["priced_as"] for row in coverage["rows"]} == {
+        "codex-auto-review",
+        "gpt-5.3-codex-spark",
+    }

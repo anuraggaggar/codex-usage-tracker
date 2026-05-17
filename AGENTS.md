@@ -25,7 +25,7 @@ This repo builds a local Codex plugin and dashboard that track aggregate token u
 python3 -m venv .venv
 . .venv/bin/activate
 python -m pip install --upgrade pip
-python -m pip install -e ".[dev]"
+python -m pip install ".[dev]"
 ```
 
 ## Validation

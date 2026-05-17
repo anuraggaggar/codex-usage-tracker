@@ -18,7 +18,7 @@ The tracker intentionally does not store prompts, assistant messages, tool outpu
 python3 -m venv .venv
 . .venv/bin/activate
 python -m pip install --upgrade pip
-python -m pip install -e ".[dev]"
+python -m pip install ".[dev]"
 ```
 
 ## Usage

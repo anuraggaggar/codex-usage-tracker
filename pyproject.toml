@@ -1,0 +1,32 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "codex-usage-tracker"
+version = "0.1.0"
+description = "Local Codex plugin and dashboard for aggregate token usage tracking."
+readme = "README.md"
+requires-python = ">=3.10"
+authors = [
+  { name = "Douglas Monsky" }
+]
+license = { text = "MIT" }
+dependencies = [
+  "mcp>=1.2.0"
+]
+
+[project.optional-dependencies]
+dev = [
+  "pytest>=8.0"
+]
+
+[project.scripts]
+codex-usage-tracker = "codex_usage_tracker.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["src"]

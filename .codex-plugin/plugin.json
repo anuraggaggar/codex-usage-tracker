@@ -1,0 +1,44 @@
+{
+  "name": "codex-usage-tracker",
+  "version": "0.1.0",
+  "description": "Track aggregate Codex token usage from local session logs.",
+  "author": {
+    "name": "Douglas Monsky"
+  },
+  "homepage": "https://github.com/douglasmonsky/codex-usage-tracker",
+  "repository": "https://github.com/douglasmonsky/codex-usage-tracker",
+  "license": "MIT",
+  "keywords": [
+    "codex",
+    "tokens",
+    "usage",
+    "mcp",
+    "dashboard"
+  ],
+  "skills": "./skills/",
+  "mcpServers": "./.mcp.json",
+  "interface": {
+    "displayName": "Codex Usage Tracker",
+    "shortDescription": "Local aggregate token usage analytics for Codex",
+    "longDescription": "Read local Codex session logs, aggregate exact token usage counters, and generate summaries, CSV exports, and a hoverable dashboard without storing raw chat text.",
+    "developerName": "Douglas Monsky",
+    "category": "Productivity",
+    "capabilities": [
+      "Interactive",
+      "Read",
+      "Write"
+    ],
+    "websiteURL": "https://github.com/douglasmonsky/codex-usage-tracker",
+    "privacyPolicyURL": "https://github.com/douglasmonsky/codex-usage-tracker",
+    "termsOfServiceURL": "https://github.com/douglasmonsky/codex-usage-tracker",
+    "defaultPrompt": [
+      "Show my Codex token usage summary",
+      "Generate a Codex usage dashboard",
+      "Export my Codex token usage CSV"
+    ],
+    "brandColor": "#2563EB",
+    "composerIcon": "./assets/icon.svg",
+    "logo": "./assets/icon.svg",
+    "screenshots": []
+  }
+}

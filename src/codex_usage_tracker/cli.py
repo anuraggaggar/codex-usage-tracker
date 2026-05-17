@@ -144,6 +144,7 @@ def main() -> int:
         help="Refresh the SQLite index before generating and serving the dashboard",
     )
     serve.add_argument("--codex-home", type=Path, default=DEFAULT_CODEX_HOME)
+    serve.add_argument("--include-archived", action="store_true")
 
     expensive = subparsers.add_parser("expensive", help="Show largest last-call usage rows")
     expensive.add_argument("--limit", type=int, default=20)
@@ -263,7 +264,11 @@ def main() -> int:
 
     if args.command == "serve-dashboard":
         if args.refresh:
-            refresh_usage_index(codex_home=args.codex_home, db_path=args.db)
+            refresh_usage_index(
+                codex_home=args.codex_home,
+                db_path=args.db,
+                include_archived=args.include_archived,
+            )
         serve_dashboard(
             db_path=args.db,
             output_path=args.output,
@@ -274,6 +279,8 @@ def main() -> int:
             port=args.port,
             context_chars=args.context_chars,
             open_browser=args.open,
+            codex_home=args.codex_home,
+            include_archived=args.include_archived,
         )
         return 0
 

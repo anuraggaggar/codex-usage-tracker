@@ -1,6 +1,10 @@
 from __future__ import annotations
 
 import json
+import threading
+import urllib.request
+from functools import partial
+from http.server import ThreadingHTTPServer
 from pathlib import Path
 
 from codex_usage_tracker.context import load_call_context
@@ -86,9 +90,52 @@ def test_dashboard_and_csv_are_aggregate_only(tmp_path: Path) -> None:
     assert "explicit parent thread" in dashboard
     assert "spawned from" in dashboard
     assert "spawned threads" in dashboard
+    assert "Refresh now" in dashboard
+    assert "Live updates" in dashboard
+    assert "/api/usage" in dashboard
     assert 'data-sort-key="time"' in dashboard
     assert 'data-sort-key="thread"' in dashboard
     assert '<option value="time" selected>Newest calls</option>' in dashboard
+
+
+def test_dashboard_server_usage_api_refreshes_aggregate_rows(tmp_path: Path) -> None:
+    from codex_usage_tracker.server import _UsageDashboardHandler
+
+    codex_home = _make_codex_home(tmp_path)
+    db_path = tmp_path / "usage.sqlite3"
+    pricing_path = _write_pricing(tmp_path / "pricing.json")
+    handler = partial(
+        _UsageDashboardHandler,
+        directory=str(tmp_path),
+        db_path=db_path,
+        pricing_path=pricing_path,
+        limit=5000,
+        since=None,
+        codex_home=codex_home,
+        include_archived=False,
+        dashboard_name="dashboard.html",
+        context_chars=2000,
+        refresh_lock=threading.Lock(),
+    )
+    server = ThreadingHTTPServer(("127.0.0.1", 0), handler)
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    try:
+        with urllib.request.urlopen(  # noqa: S310 - local test server only
+            f"http://127.0.0.1:{server.server_port}/api/usage?refresh=1",
+            timeout=5,
+        ) as response:
+            payload = json.loads(response.read().decode("utf-8"))
+    finally:
+        server.shutdown()
+        server.server_close()
+        thread.join(timeout=5)
+
+    assert payload["refresh_result"]["parsed_events"] == 4
+    assert len(payload["rows"]) == 4
+    assert payload["pricing_configured"] is True
+    assert "refreshed_at" in payload
+    assert "SECRET RAW PROMPT" not in json.dumps(payload)
 
 
 def test_context_loads_raw_log_only_on_demand(tmp_path: Path) -> None:

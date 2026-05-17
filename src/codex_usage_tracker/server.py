@@ -3,7 +3,9 @@
 from __future__ import annotations
 
 import json
+import threading
 import webbrowser
+from datetime import datetime, timezone
 from functools import partial
 from http import HTTPStatus
 from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
@@ -12,8 +14,9 @@ from pathlib import Path
 from urllib.parse import parse_qs, urlparse
 
 from codex_usage_tracker.context import DEFAULT_CONTEXT_CHARS, load_call_context
-from codex_usage_tracker.dashboard import generate_dashboard
-from codex_usage_tracker.paths import DEFAULT_DASHBOARD_PATH, DEFAULT_PRICING_PATH
+from codex_usage_tracker.dashboard import dashboard_payload, generate_dashboard
+from codex_usage_tracker.paths import DEFAULT_CODEX_HOME, DEFAULT_DASHBOARD_PATH, DEFAULT_PRICING_PATH
+from codex_usage_tracker.store import refresh_usage_index
 
 
 def serve_dashboard(
@@ -26,6 +29,8 @@ def serve_dashboard(
     port: int = 8765,
     context_chars: int = DEFAULT_CONTEXT_CHARS,
     open_browser: bool = False,
+    codex_home: Path = DEFAULT_CODEX_HOME,
+    include_archived: bool = False,
 ) -> None:
     """Generate and serve the dashboard plus a localhost-only context endpoint."""
 
@@ -41,13 +46,19 @@ def serve_dashboard(
         _UsageDashboardHandler,
         directory=str(output.parent),
         db_path=db_path,
+        pricing_path=pricing_path,
+        limit=limit,
+        since=since,
+        codex_home=codex_home,
+        include_archived=include_archived,
         dashboard_name=output.name,
         context_chars=context_chars,
+        refresh_lock=threading.Lock(),
     )
     server = ThreadingHTTPServer((host, port), handler)
     url = f"http://{host}:{port}/{output.name}"
     print(f"Serving Codex usage dashboard at {url}")
-    print("Raw context is loaded only through /api/context after a row action.")
+    print("Aggregate rows refresh through /api/usage; raw context is loaded only through /api/context after a row action.")
     if open_browser:
         webbrowser.open(url)
     try:
@@ -63,19 +74,34 @@ class _UsageDashboardHandler(SimpleHTTPRequestHandler):
         self,
         *args: object,
         db_path: Path,
+        pricing_path: Path,
+        limit: int,
+        since: str | None,
+        codex_home: Path,
+        include_archived: bool,
         dashboard_name: str,
         context_chars: int,
+        refresh_lock: threading.Lock,
         **kwargs: object,
     ) -> None:
         self._db_path = db_path
+        self._pricing_path = pricing_path
+        self._limit = limit
+        self._since = since
+        self._codex_home = codex_home
+        self._include_archived = include_archived
         self._dashboard_name = dashboard_name
         self._context_chars = context_chars
+        self._refresh_lock = refresh_lock
         super().__init__(*args, **kwargs)
 
     def do_GET(self) -> None:  # noqa: N802 - stdlib hook name
         parsed = urlparse(self.path)
         if parsed.path == "/api/context":
             self._handle_context(parsed.query)
+            return
+        if parsed.path == "/api/usage":
+            self._handle_usage(parsed.query)
             return
         if parsed.path == "/":
             self.path = f"/{self._dashboard_name}"
@@ -84,6 +110,11 @@ class _UsageDashboardHandler(SimpleHTTPRequestHandler):
     def end_headers(self) -> None:
         self.send_header("X-Content-Type-Options", "nosniff")
         super().end_headers()
+
+    def log_message(self, format: str, *args: object) -> None:
+        if self.path.startswith("/api/usage"):
+            return
+        super().log_message(format, *args)
 
     def _handle_context(self, query: str) -> None:
         params = parse_qs(query)
@@ -116,6 +147,39 @@ class _UsageDashboardHandler(SimpleHTTPRequestHandler):
             return
         self._send_json(HTTPStatus.OK, payload)
 
+    def _handle_usage(self, query: str) -> None:
+        params = parse_qs(query)
+        refresh_result = None
+        if _truthy(_first(params.get("refresh"))):
+            with self._refresh_lock:
+                result = refresh_usage_index(
+                    codex_home=self._codex_home,
+                    db_path=self._db_path,
+                    include_archived=self._include_archived,
+                )
+            refresh_result = {
+                "scanned_files": result.scanned_files,
+                "parsed_events": result.parsed_events,
+                "inserted_or_updated_events": result.inserted_or_updated_events,
+                "db_path": result.db_path,
+            }
+        try:
+            payload = dashboard_payload(
+                db_path=self._db_path,
+                limit=self._limit,
+                pricing_path=self._pricing_path,
+                since=self._since,
+            )
+        except OSError as exc:
+            self._send_json(
+                HTTPStatus.INTERNAL_SERVER_ERROR,
+                {"error": f"Could not read aggregate dashboard data: {exc}"},
+            )
+            return
+        payload["refreshed_at"] = _utc_now()
+        payload["refresh_result"] = refresh_result
+        self._send_json(HTTPStatus.OK, payload)
+
     def _send_json(self, status: HTTPStatus, payload: dict[str, object]) -> None:
         body = json.dumps(payload, ensure_ascii=True).encode("utf-8")
         self.send_response(status)
@@ -132,6 +196,10 @@ def _first(values: list[str] | None) -> str | None:
 
 def _truthy(value: str | None) -> bool:
     return str(value or "").lower() in {"1", "true", "yes", "on"}
+
+
+def _utc_now() -> str:
+    return datetime.now(timezone.utc).isoformat(timespec="seconds").replace("+00:00", "Z")
 
 
 def _validate_loopback_host(host: str) -> None:

@@ -11,6 +11,23 @@ from codex_usage_tracker.pricing import annotate_rows_with_efficiency, load_pric
 from codex_usage_tracker.store import query_dashboard_events
 
 
+def dashboard_payload(
+    db_path: Path,
+    limit: int = 5000,
+    pricing_path: Path = DEFAULT_PRICING_PATH,
+    since: str | None = None,
+) -> dict[str, object]:
+    """Return aggregate-only dashboard data without rendering HTML."""
+
+    rows = query_dashboard_events(db_path=db_path, limit=limit, since=since)
+    pricing = load_pricing_config(pricing_path)
+    return {
+        "rows": annotate_rows_with_efficiency(rows, pricing),
+        "pricing_configured": pricing.loaded and not pricing.error,
+        "pricing_source": pricing.source,
+    }
+
+
 def generate_dashboard(
     db_path: Path,
     output_path: Path = DEFAULT_DASHBOARD_PATH,
@@ -18,16 +35,14 @@ def generate_dashboard(
     pricing_path: Path = DEFAULT_PRICING_PATH,
     since: str | None = None,
 ) -> Path:
-    rows = query_dashboard_events(db_path=db_path, limit=limit, since=since)
-    pricing = load_pricing_config(pricing_path)
-    rows = annotate_rows_with_efficiency(rows, pricing)
     output_path.parent.mkdir(parents=True, exist_ok=True)
     payload = json.dumps(
-        {
-            "rows": rows,
-            "pricing_configured": pricing.loaded and not pricing.error,
-            "pricing_source": pricing.source,
-        },
+        dashboard_payload(
+            db_path=db_path,
+            limit=limit,
+            pricing_path=pricing_path,
+            since=since,
+        ),
         ensure_ascii=True,
     ).replace("</", "<\\/")
     output_path.write_text(_html(payload), encoding="utf-8")
@@ -73,6 +88,47 @@ def _html(payload: str) -> str:
     h1 {{ margin: 0 0 6px; font-size: 24px; font-weight: 720; }}
     header p {{ margin: 0; color: var(--muted); max-width: 920px; line-height: 1.45; }}
     .source-line {{ margin-top: 6px; font-size: 12px; }}
+    .live-bar {{
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 10px;
+      margin-top: 12px;
+    }}
+    .refresh-button {{
+      min-height: 34px;
+      padding: 6px 12px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: var(--panel);
+      color: var(--blue);
+      font-size: 12px;
+      font-weight: 760;
+      cursor: pointer;
+    }}
+    .refresh-button:hover {{ background: #eff6ff; }}
+    .refresh-button:disabled {{ cursor: progress; opacity: 0.7; }}
+    .live-toggle {{
+      display: inline-flex;
+      grid-template-columns: none;
+      align-items: center;
+      gap: 7px;
+      min-height: 34px;
+      font-size: 12px;
+      font-weight: 760;
+      color: var(--muted);
+    }}
+    .live-toggle input {{
+      width: auto;
+      min-height: 0;
+      padding: 0;
+      margin: 0;
+    }}
+    .live-status {{
+      color: var(--muted);
+      font-size: 12px;
+      font-weight: 680;
+    }}
     main {{ padding: 22px 28px 36px; }}
     .filters {{
       display: grid;
@@ -378,6 +434,11 @@ def _html(payload: str) -> str:
     <h1>Codex Usage Dashboard</h1>
     <p>Aggregate-only token analytics from local Codex logs. Hover a table row to inspect exact usage fields; raw logged context is loaded only on demand from the local dashboard server.</p>
     <p id="pricingSource" class="source-line"></p>
+    <div class="live-bar">
+      <button id="refreshDashboard" class="refresh-button" type="button">Refresh now</button>
+      <label class="live-toggle"><input id="autoRefresh" type="checkbox" checked> Live updates</label>
+      <span id="liveStatus" class="live-status">Static snapshot loaded.</span>
+    </div>
   </header>
   <main>
     <div class="filters">
@@ -431,10 +492,10 @@ def _html(payload: str) -> str:
   </main>
   <script id="usage-data" type="application/json">{payload}</script>
   <script>
-    const payload = JSON.parse(document.getElementById('usage-data').textContent);
-    const data = Array.isArray(payload) ? payload : payload.rows;
-    const pricingConfigured = Boolean(payload.pricing_configured);
-    const pricingSource = payload.pricing_source || {{}};
+    const initialPayload = JSON.parse(document.getElementById('usage-data').textContent);
+    let data = payloadRows(initialPayload);
+    let pricingConfigured = Boolean(initialPayload.pricing_configured);
+    let pricingSource = initialPayload.pricing_source || {{}};
     const rowsEl = document.getElementById('rows');
     const detailEl = document.getElementById('detail');
     const searchEl = document.getElementById('search');
@@ -446,14 +507,21 @@ def _html(payload: str) -> str:
     const tableCaptionEl = document.getElementById('tableCaption');
     const callsViewEl = document.getElementById('callsView');
     const threadsViewEl = document.getElementById('threadsView');
+    const refreshDashboardEl = document.getElementById('refreshDashboard');
+    const autoRefreshEl = document.getElementById('autoRefresh');
+    const liveStatusEl = document.getElementById('liveStatus');
     const number = new Intl.NumberFormat();
-    const rowByRecordId = new Map(data.map(row => [row.record_id, row]));
-    const parentCandidates = buildParentCandidates(data);
-    const threadAttachmentByRecordId = new Map(data.map(row => [row.record_id, resolveThreadAttachment(row)]));
+    let rowByRecordId = new Map();
+    let parentCandidates = {{ bySession: new Map(), byCwd: new Map() }};
+    let threadAttachmentByRecordId = new Map();
     const expandedThreads = new Set();
+    const liveRefreshSupported = window.location.protocol !== 'file:';
+    const liveRefreshIntervalMs = 10000;
     let activeView = 'calls';
     let sortKey = sortEl.value || 'time';
     let sortDirection = defaultSortDirection(sortKey);
+    let refreshInFlight = false;
+    let autoRefreshTimer = null;
     const money = (value, missingLabel = 'No price') => {{
       if (value === null || value === undefined) return missingLabel;
       const amount = Number(value) || 0;
@@ -534,23 +602,46 @@ def _html(payload: str) -> str:
       }});
       tableCaptionEl.dataset.sortDescription = `${{sortLabel(sortKey)}} ${{sortDirection === 'asc' ? 'ascending' : 'descending'}}`;
     }}
-    function optionize(select, values) {{
+    function payloadRows(nextPayload) {{
+      return Array.isArray(nextPayload) ? nextPayload : Array.isArray(nextPayload.rows) ? nextPayload.rows : [];
+    }}
+    function rebuildDashboardIndexes() {{
+      rowByRecordId = new Map(data.map(row => [row.record_id, row]));
+      parentCandidates = buildParentCandidates(data);
+      threadAttachmentByRecordId = new Map(data.map(row => [row.record_id, resolveThreadAttachment(row)]));
+    }}
+    function rebuildSelectOptions(select, values, label) {{
+      const previous = select.value;
+      select.textContent = '';
+      const allOption = document.createElement('option');
+      allOption.value = '';
+      allOption.textContent = label;
+      select.appendChild(allOption);
       [...new Set(values.filter(Boolean))].sort().forEach(value => {{
         const option = document.createElement('option');
         option.value = value;
         option.textContent = value;
         select.appendChild(option);
       }});
+      const valuesSet = new Set(Array.from(select.options).map(option => option.value));
+      select.value = valuesSet.has(previous) ? previous : '';
     }}
-    optionize(modelEl, data.map(row => row.model));
-    optionize(effortEl, data.map(row => row.effort));
-    if (pricingConfigured && pricingSource.url) {{
-      const sourceParts = [
-        pricingSource.name || 'Pricing source',
-        pricingSource.tier ? `${{pricingSource.tier}} tier` : '',
-        pricingSource.fetched_at ? `fetched ${{pricingSource.fetched_at}}` : '',
-      ].filter(Boolean);
-      document.getElementById('pricingSource').textContent = `Estimated costs use ${{sourceParts.join(', ')}}; internal Codex labels may use marked best-guess estimates.`;
+    function rebuildFilterOptions() {{
+      rebuildSelectOptions(modelEl, data.map(row => row.model), 'All models');
+      rebuildSelectOptions(effortEl, data.map(row => row.effort), 'All efforts');
+    }}
+    function updatePricingSourceLine() {{
+      const sourceEl = document.getElementById('pricingSource');
+      if (pricingConfigured && pricingSource.url) {{
+        const sourceParts = [
+          pricingSource.name || 'Pricing source',
+          pricingSource.tier ? `${{pricingSource.tier}} tier` : '',
+          pricingSource.fetched_at ? `fetched ${{pricingSource.fetched_at}}` : '',
+        ].filter(Boolean);
+        sourceEl.textContent = `Estimated costs use ${{sourceParts.join(', ')}}; internal Codex labels may use marked best-guess estimates.`;
+      }} else {{
+        sourceEl.textContent = pricingConfigured ? '' : 'Estimated costs are unavailable until pricing is configured.';
+      }}
     }}
     function filtered() {{
       const term = searchEl.value.trim().toLowerCase();
@@ -1134,8 +1225,78 @@ def _html(payload: str) -> str:
       activeView = view;
       render();
     }}
+    function localTime(value) {{
+      const date = value ? new Date(value) : new Date();
+      if (Number.isNaN(date.getTime())) return '';
+      return date.toLocaleTimeString([], {{ hour: 'numeric', minute: '2-digit', second: '2-digit' }});
+    }}
+    function updateLiveStatus(message) {{
+      liveStatusEl.textContent = message;
+    }}
+    function applyDashboardPayload(nextPayload) {{
+      data = payloadRows(nextPayload);
+      pricingConfigured = Boolean(nextPayload.pricing_configured);
+      pricingSource = nextPayload.pricing_source || {{}};
+      rebuildDashboardIndexes();
+      rebuildFilterOptions();
+      updatePricingSourceLine();
+      render();
+    }}
+    async function refreshDashboardData(manual = false) {{
+      if (!liveRefreshSupported) {{
+        updateLiveStatus('Reloading static dashboard snapshot...');
+        window.location.reload();
+        return;
+      }}
+      if (refreshInFlight) return;
+      refreshInFlight = true;
+      refreshDashboardEl.disabled = true;
+      updateLiveStatus(manual ? 'Refreshing local usage index...' : 'Checking for new usage...');
+      try {{
+        const params = new URLSearchParams({{ refresh: '1', _: String(Date.now()) }});
+        const response = await fetch(`/api/usage?${{params.toString()}}`, {{
+          headers: {{ 'Accept': 'application/json' }},
+          cache: 'no-store',
+        }});
+        if (!response.ok) {{
+          throw new Error(`HTTP ${{response.status}}`);
+        }}
+        const nextPayload = await response.json();
+        if (nextPayload.error) throw new Error(nextPayload.error);
+        applyDashboardPayload(nextPayload);
+        const result = nextPayload.refresh_result || {{}};
+        const indexed = result.inserted_or_updated_events === undefined
+          ? ''
+          : ` Indexed ${{number.format(result.inserted_or_updated_events)}} aggregate rows from ${{number.format(result.scanned_files || 0)}} logs.`;
+        updateLiveStatus(`Updated ${{localTime(nextPayload.refreshed_at)}}. ${{number.format(data.length)}} calls loaded.${{indexed}}`);
+      }} catch (error) {{
+        const message = error.message || String(error);
+        updateLiveStatus(`Live refresh unavailable: ${{message}}${{manual ? '. Reload this page after regenerating a static dashboard, or run codex-usage-tracker serve-dashboard.' : ''}}`);
+        if (manual && message === 'HTTP 404') window.location.reload();
+      }} finally {{
+        refreshInFlight = false;
+        refreshDashboardEl.disabled = false;
+      }}
+    }}
+    function scheduleAutoRefresh() {{
+      if (autoRefreshTimer) window.clearInterval(autoRefreshTimer);
+      autoRefreshTimer = null;
+      if (!autoRefreshEl.checked || !liveRefreshSupported) return;
+      autoRefreshTimer = window.setInterval(() => {{
+        if (document.visibilityState === 'visible') refreshDashboardData(false);
+      }}, liveRefreshIntervalMs);
+    }}
     callsViewEl.addEventListener('click', () => setView('calls'));
     threadsViewEl.addEventListener('click', () => setView('threads'));
+    refreshDashboardEl.addEventListener('click', () => refreshDashboardData(true));
+    autoRefreshEl.addEventListener('change', () => {{
+      scheduleAutoRefresh();
+      updateLiveStatus(autoRefreshEl.checked ? `Live updates enabled; polling every ${{liveRefreshIntervalMs / 1000}}s.` : 'Live updates paused.');
+      if (autoRefreshEl.checked) refreshDashboardData(false);
+    }});
+    document.addEventListener('visibilitychange', () => {{
+      if (document.visibilityState === 'visible' && autoRefreshEl.checked) refreshDashboardData(false);
+    }});
     document.querySelectorAll('[data-sort-key]').forEach(button => {{
       button.addEventListener('click', () => handleHeaderSort(button.dataset.sortKey));
     }});
@@ -1147,6 +1308,17 @@ def _html(payload: str) -> str:
     }});
     [searchEl, modelEl, effortEl, pricingStatusEl].forEach(el => el.addEventListener('input', render));
     sortEl.addEventListener('input', () => setSort(sortEl.value, defaultSortDirection(sortEl.value)));
+    rebuildDashboardIndexes();
+    rebuildFilterOptions();
+    updatePricingSourceLine();
+    if (!liveRefreshSupported) {{
+      autoRefreshEl.checked = false;
+      autoRefreshEl.disabled = true;
+      updateLiveStatus('Static file mode. Refresh reloads the dashboard snapshot.');
+    }} else {{
+      updateLiveStatus(`Live updates enabled; polling every ${{liveRefreshIntervalMs / 1000}}s.`);
+      scheduleAutoRefresh();
+    }}
     render();
   </script>
 </body>

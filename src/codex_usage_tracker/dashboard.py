@@ -233,6 +233,13 @@ def _html(payload: str) -> str:
     .thread-row[aria-expanded="true"] {{
       background: #f8fbff;
     }}
+    .thread-row.spawned-thread {{
+      background: #fcfdff;
+    }}
+    .thread-row.spawned-thread td:nth-child(2) {{
+      border-left: 3px solid #bfdbfe;
+      padding-left: 18px;
+    }}
     .thread-title {{
       display: flex;
       gap: 8px;
@@ -264,6 +271,10 @@ def _html(payload: str) -> str:
     .thread-subtle {{
       color: var(--muted);
       font-size: 12px;
+    }}
+    .thread-relation {{
+      color: var(--blue);
+      font-weight: 720;
     }}
     .child-cell {{
       padding: 0;
@@ -738,11 +749,74 @@ def _html(payload: str) -> str:
       if (timeFallback !== 0) return timeFallback;
       return String(a.label || '').localeCompare(String(b.label || ''));
     }}
+    function relationshipTime(group) {{
+      return String(group.relationshipLatestActivity || group.latestActivity || '');
+    }}
+    function compareTopLevelThreads(a, b) {{
+      if (sortKey === 'time' && sortDirection === 'desc') {{
+        const relationshipCompare = relationshipTime(b).localeCompare(relationshipTime(a));
+        if (relationshipCompare !== 0) return relationshipCompare;
+      }}
+      return compareThreads(a, b);
+    }}
     function compactListSummary(values, fallback = 'Mixed') {{
       const unique = [...new Set(values.filter(Boolean))].sort();
       if (!unique.length) return 'Unknown';
       if (unique.length === 1) return unique[0];
       return `${{unique[0]}} +${{unique.length - 1}} ${{fallback.toLowerCase()}}`;
+    }}
+    function dominantParentThread(calls, ownLabel) {{
+      const counts = new Map();
+      for (const row of calls) {{
+        const parent = resolvedParentThreadName(row);
+        if (!parent || parent === ownLabel) continue;
+        counts.set(parent, (counts.get(parent) || 0) + 1);
+      }}
+      const ranked = [...counts.entries()].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]));
+      return ranked.length ? ranked[0][0] : '';
+    }}
+    function arrangeThreadGroups(groups) {{
+      const byLabel = new Map(groups.map(group => [group.label, group]));
+      for (const group of groups) {{
+        group.childThreadCount = 0;
+        group.childCallCount = 0;
+        group.relationshipLatestActivity = group.latestActivity;
+        group.parentVisible = Boolean(group.parentThreadLabel && byLabel.has(group.parentThreadLabel));
+        group.renderAsChild = false;
+      }}
+      for (const group of groups) {{
+        if (!group.parentVisible) continue;
+        const parent = byLabel.get(group.parentThreadLabel);
+        parent.childThreadCount += 1;
+        parent.childCallCount += group.callCount;
+        if (String(group.latestActivity || '') > String(parent.relationshipLatestActivity || '')) {{
+          parent.relationshipLatestActivity = group.latestActivity;
+        }}
+      }}
+      if (sortKey !== 'time' || sortDirection !== 'desc') {{
+        return sortThreads(groups);
+      }}
+      const childrenByParent = new Map();
+      for (const group of groups) {{
+        if (!group.parentVisible) continue;
+        if (!childrenByParent.has(group.parentThreadLabel)) childrenByParent.set(group.parentThreadLabel, []);
+        childrenByParent.get(group.parentThreadLabel).push(group);
+      }}
+      const display = [];
+      const topLevel = groups.filter(group => !group.parentVisible).sort(compareTopLevelThreads);
+      const displayed = new Set();
+      function appendGroup(group, renderAsChild = false) {{
+        if (displayed.has(group.key)) return;
+        displayed.add(group.key);
+        group.renderAsChild = renderAsChild;
+        display.push(group);
+        const children = (childrenByParent.get(group.label) || []).sort(compareThreads);
+        for (const child of children) appendGroup(child, true);
+      }}
+      for (const group of topLevel) {{
+        appendGroup(group, false);
+      }}
+      return display;
     }}
     function pricingStatusFor(rows) {{
       const priced = rows.filter(row => row.pricing_model);
@@ -762,7 +836,7 @@ def _html(payload: str) -> str:
         }}
         map.get(key).rows.push(row);
       }}
-      return sortThreads([...map.values()].map(group => {{
+      const groups = [...map.values()].map(group => {{
         const calls = group.rows.slice().sort(chronological);
         const totalTokens = calls.reduce((sum, row) => sum + Number(row.total_tokens || 0), 0);
         const inputTokens = calls.reduce((sum, row) => sum + Number(row.input_tokens || 0), 0);
@@ -776,12 +850,14 @@ def _html(payload: str) -> str:
         const attachedCount = calls.filter(row => rowAttachment(row).relation !== 'direct' && rowAttachment(row).relation !== 'session').length;
         const modelSummary = compactListSummary(calls.map(row => row.model), 'models');
         const effortSummary = compactListSummary(calls.map(row => row.effort), 'efforts');
+        const parentThreadLabel = dominantParentThread(calls, group.label);
         return {{
           key: group.key,
           label: group.label,
           calls,
           callCount: calls.length,
           latestActivity,
+          parentThreadLabel,
           modelSummary,
           effortSummary,
           totalTokens,
@@ -794,7 +870,8 @@ def _html(payload: str) -> str:
           autoReviewCount,
           attachedCount,
         }};
-      }}));
+      }});
+      return arrangeThreadGroups(groups);
     }}
     function render() {{
       const rows = filtered();
@@ -854,11 +931,13 @@ def _html(payload: str) -> str:
         const threadNotes = [
           `${{number.format(group.callCount)}} calls`,
           group.pricingStatus,
+          group.parentThreadLabel ? `spawned from ${{group.parentThreadLabel}}` : '',
+          group.childThreadCount ? `${{number.format(group.childThreadCount)}} spawned threads` : '',
           group.subagentCount ? `${{number.format(group.subagentCount)}} subagent` : '',
           group.autoReviewCount ? `${{number.format(group.autoReviewCount)}} auto-review` : '',
           group.attachedCount ? 'attached' : '',
         ].filter(Boolean).join(' - ');
-        tr.className = 'thread-row';
+        tr.className = `thread-row${{group.parentThreadLabel ? ' spawned-thread' : ''}}`;
         tr.setAttribute('aria-expanded', expanded ? 'true' : 'false');
         tr.innerHTML = `
           <td>${{escapeHtml(truncate(group.latestActivity, 20))}}</td>
@@ -866,7 +945,7 @@ def _html(payload: str) -> str:
             <div class="thread-title">
                 <span class="thread-toggle" aria-hidden="true">${{expanded ? '-' : '+'}}</span>
               <span class="thread-meta">
-                <span class="thread-name">${{escapeHtml(truncate(group.label, 72))}}</span>
+                <span class="thread-name">${{group.renderAsChild ? '<span class="thread-relation">spawned</span> ' : ''}}${{escapeHtml(truncate(group.label, 72))}}</span>
                 <span class="thread-subtle">${{escapeHtml(threadNotes)}}</span>
               </span>
             </div>
@@ -1044,6 +1123,9 @@ def _html(payload: str) -> str:
         ['Subagent calls', number.format(group.subagentCount)],
         ['Auto-review calls', number.format(group.autoReviewCount)],
         ['Attached calls', number.format(group.attachedCount)],
+        ['Spawned from', group.parentThreadLabel || 'None'],
+        ['Spawned threads', number.format(group.childThreadCount || 0)],
+        ['Spawned child calls', number.format(group.childCallCount || 0)],
         ['Max context use', pct(group.maxContextUse)],
       ];
       detailEl.innerHTML = '<dl>' + fields.map(([key, value]) => `<dt>${{escapeHtml(key)}}</dt><dd>${{escapeHtml(short(value))}}</dd>`).join('') + '</dl>';

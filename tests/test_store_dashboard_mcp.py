@@ -84,6 +84,8 @@ def test_dashboard_and_csv_are_aggregate_only(tmp_path: Path) -> None:
     assert "Load context" in dashboard
     assert "parent_thread_name" in dashboard
     assert "explicit parent thread" in dashboard
+    assert "spawned from" in dashboard
+    assert "spawned threads" in dashboard
     assert 'data-sort-key="time"' in dashboard
     assert 'data-sort-key="thread"' in dashboard
     assert '<option value="time" selected>Newest calls</option>' in dashboard

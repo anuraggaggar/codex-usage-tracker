@@ -1,6 +1,6 @@
 {
   "name": "codex-usage-tracker",
-  "version": "0.1.4",
+  "version": "0.1.5",
   "description": "Track aggregate Codex token usage from local session logs.",
   "author": {
     "name": "Douglas Monsky"
@@ -38,6 +38,7 @@
       "Show my Codex pricing coverage",
       "Update Codex usage pricing from OpenAI docs",
       "Generate a Codex usage dashboard",
+      "Generate a threaded Codex usage dashboard",
       "Export my Codex token usage CSV"
     ],
     "brandColor": "#2563EB",

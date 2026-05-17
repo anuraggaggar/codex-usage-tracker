@@ -19,6 +19,7 @@ from codex_usage_tracker.store import (
 )
 
 SESSION_ID = "019e374d-c19f-7da3-a44f-8de043a7a64e"
+SECOND_SESSION_ID = "019e37d4-c1f1-71aa-b154-2d5d837af92c"
 
 
 def test_refresh_is_idempotent_and_summary_works(tmp_path: Path) -> None:
@@ -33,12 +34,12 @@ def test_refresh_is_idempotent_and_summary_works(tmp_path: Path) -> None:
     future_summary = query_summary(db_path=db_path, group_by="model", since="2099-01-01")
     expensive = query_most_expensive_calls(db_path=db_path, limit=1)
 
-    assert first.parsed_events == 2
-    assert second.parsed_events == 2
+    assert first.parsed_events == 3
+    assert second.parsed_events == 3
     assert len(session_rows) == 2
     assert summary[0]["group_key"] == "gpt-5.5"
-    assert summary[0]["total_tokens"] == 300
-    assert recent_summary[0]["total_tokens"] == 300
+    assert summary[0]["total_tokens"] == 350
+    assert recent_summary[0]["total_tokens"] == 350
     assert future_summary == []
     assert expensive[0]["total_tokens"] == 200
 
@@ -56,13 +57,17 @@ def test_dashboard_and_csv_are_aggregate_only(tmp_path: Path) -> None:
 
     dashboard = dashboard_path.read_text(encoding="utf-8")
     csv_text = csv_path.read_text(encoding="utf-8")
-    assert exported == 2
+    assert exported == 3
     assert "SECRET RAW PROMPT" not in dashboard
     assert "SECRET RAW PROMPT" not in csv_text
     assert "last call" in dashboard.lower()
     assert "session cumulative" in dashboard.lower()
     assert "Estimated Cost" in dashboard
     assert "estimated_cost_usd" in dashboard
+    assert "callsView" in dashboard
+    assert "threadsView" in dashboard
+    assert "thread-row" in dashboard
+    assert "thread-call-table" in dashboard
 
 
 def test_mcp_wrappers_smoke(tmp_path: Path, monkeypatch) -> None:
@@ -88,7 +93,7 @@ def test_mcp_wrappers_smoke(tmp_path: Path, monkeypatch) -> None:
     pricing_update = mcp_server.update_usage_pricing_config()
     doctor = mcp_server.usage_doctor()
 
-    assert refresh["parsed_events"] == 2
+    assert refresh["parsed_events"] == 3
     assert "Add Codex token tracking" in summary
     assert "estimated cost" in model_summary
     assert "Most expensive Codex calls" in expensive
@@ -158,6 +163,7 @@ def _make_codex_home(tmp_path: Path) -> Path:
     codex_home = tmp_path / ".codex"
     log_dir = codex_home / "sessions" / "2026" / "05" / "17"
     log_path = log_dir / f"rollout-2026-05-17T14-58-23-{SESSION_ID}.jsonl"
+    second_log_path = log_dir / f"rollout-2026-05-17T16-24-11-{SECOND_SESSION_ID}.jsonl"
     _write_jsonl(
         codex_home / "session_index.jsonl",
         [
@@ -165,7 +171,12 @@ def _make_codex_home(tmp_path: Path) -> Path:
                 "id": SESSION_ID,
                 "thread_name": "Add Codex token tracking",
                 "updated_at": "2026-05-17T18:58:27Z",
-            }
+            },
+            {
+                "id": SECOND_SESSION_ID,
+                "thread_name": "Review Codex pricing coverage",
+                "updated_at": "2026-05-17T20:24:11Z",
+            },
         ],
     )
     _write_jsonl(
@@ -191,6 +202,22 @@ def _make_codex_home(tmp_path: Path) -> Path:
             ),
             _token_event(100, 100),
             _token_event(300, 200),
+        ],
+    )
+    _write_jsonl(
+        second_log_path,
+        [
+            _entry("session_meta", {"id": SECOND_SESSION_ID}),
+            _entry(
+                "turn_context",
+                {
+                    "turn_id": "turn-c",
+                    "model": "gpt-5.5",
+                    "effort": "medium",
+                    "cwd": "/tmp/codex-usage-tracker",
+                },
+            ),
+            _token_event(50, 50),
         ],
     )
     return codex_home

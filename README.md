@@ -8,7 +8,7 @@ Local Codex plugin and dashboard for tracking aggregate token usage from Codex s
 - Optionally includes `~/.codex/archived_sessions/*.jsonl`.
 - Stores aggregate-only usage metrics in local SQLite.
 - Exposes MCP tools for refresh, summaries, session detail, CSV export, and dashboard generation.
-- Generates a static hoverable dashboard for local review.
+- Generates a static hoverable dashboard with flat calls and threaded-by-thread views.
 - Provides a read-only doctor command for local plugin/MCP setup checks.
 - Optionally estimates costs from a local pricing file that can be refreshed from OpenAI's published pricing docs.
 
@@ -43,6 +43,8 @@ Generate the local dashboard:
 codex-usage-tracker dashboard --open
 codex-usage-tracker open-dashboard
 ```
+
+The dashboard opens in the flat Calls view. Use the Calls/Threads toggle to group filtered usage by thread, then click a thread row to expand its calls in chronological order.
 
 Show a summary:
 

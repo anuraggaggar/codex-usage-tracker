@@ -57,4 +57,5 @@ codex-usage-tracker expensive --limit 5
 - Dashboard is generated from aggregate-only JSON.
 - Doctor, summary presets, dashboard, and expensive-call views work from CLI and MCP wrappers.
 - Pricing coverage clearly separates configured, estimated, and unpriced model usage.
+- Dashboard Calls and Threads views share filters, totals, and aggregate-only hover details.
 - Tests and compile checks pass.

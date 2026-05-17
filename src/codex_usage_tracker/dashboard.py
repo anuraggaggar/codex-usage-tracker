@@ -128,6 +128,47 @@ def _html(payload: str) -> str:
     th, td {{ padding: 10px 12px; border-bottom: 1px solid var(--line); text-align: left; vertical-align: top; }}
     th {{ color: var(--muted); font-size: 12px; background: #fbfcfe; position: sticky; top: 0; }}
     tr:hover {{ background: #eff6ff; }}
+    button {{
+      font: inherit;
+    }}
+    .table-tools {{
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 12px;
+      padding: 12px 16px;
+      border-bottom: 1px solid var(--line);
+      background: #fbfcfe;
+    }}
+    .segmented {{
+      display: inline-flex;
+      gap: 2px;
+      padding: 3px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: #eef2f8;
+    }}
+    .segmented button {{
+      min-width: 82px;
+      min-height: 30px;
+      border: 0;
+      border-radius: 6px;
+      background: transparent;
+      color: var(--muted);
+      font-size: 12px;
+      font-weight: 760;
+      cursor: pointer;
+    }}
+    .segmented button[aria-pressed="true"] {{
+      background: var(--panel);
+      color: var(--ink);
+      box-shadow: 0 1px 4px rgba(23, 32, 51, 0.12);
+    }}
+    .table-caption {{
+      color: var(--muted);
+      font-size: 12px;
+      font-weight: 680;
+    }}
     .num {{ text-align: right; font-variant-numeric: tabular-nums; }}
     .pill {{
       display: inline-flex;
@@ -158,6 +199,68 @@ def _html(payload: str) -> str:
       font-weight: 680;
       white-space: nowrap;
     }}
+    .thread-row {{
+      cursor: pointer;
+    }}
+    .thread-row[aria-expanded="true"] {{
+      background: #f8fbff;
+    }}
+    .thread-title {{
+      display: flex;
+      gap: 8px;
+      align-items: center;
+      min-width: 0;
+    }}
+    .thread-toggle {{
+      flex: 0 0 auto;
+      display: inline-grid;
+      place-items: center;
+      width: 22px;
+      height: 22px;
+      border: 1px solid var(--line);
+      border-radius: 999px;
+      background: var(--panel);
+      color: var(--blue);
+      font-size: 13px;
+      font-weight: 820;
+    }}
+    .thread-meta {{
+      display: grid;
+      gap: 2px;
+      min-width: 0;
+    }}
+    .thread-name {{
+      font-weight: 760;
+      overflow-wrap: anywhere;
+    }}
+    .thread-subtle {{
+      color: var(--muted);
+      font-size: 12px;
+    }}
+    .child-cell {{
+      padding: 0;
+      background: #f8fafd;
+    }}
+    .thread-call-table {{
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 12px;
+    }}
+    .thread-call-table th {{
+      position: static;
+      background: #eef3fb;
+    }}
+    .thread-call-table td, .thread-call-table th {{
+      padding: 8px 10px;
+    }}
+    .thread-call-table tr:last-child td {{
+      border-bottom: 0;
+    }}
+    .empty-state {{
+      padding: 18px 16px;
+      color: var(--muted);
+      text-align: center;
+    }}
     .detail {{
       padding: 14px 16px;
       min-height: 280px;
@@ -172,6 +275,8 @@ def _html(payload: str) -> str:
       main, header {{ padding-left: 16px; padding-right: 16px; }}
       table {{ font-size: 12px; }}
       th, td {{ padding: 8px; }}
+      .table-tools {{ align-items: stretch; flex-direction: column; }}
+      .segmented, .segmented button {{ width: 100%; }}
     }}
   </style>
 </head>
@@ -201,7 +306,14 @@ def _html(payload: str) -> str:
     </div>
     <div class="grid">
       <section>
-        <h2>Model Calls</h2>
+        <h2 id="tableTitle">Model Calls</h2>
+        <div class="table-tools">
+          <div class="segmented" role="group" aria-label="Dashboard view">
+            <button id="callsView" type="button" aria-pressed="true">Calls</button>
+            <button id="threadsView" type="button" aria-pressed="false">Threads</button>
+          </div>
+          <div id="tableCaption" class="table-caption">Showing individual model calls.</div>
+        </div>
         <table>
           <thead>
             <tr>
@@ -230,7 +342,14 @@ def _html(payload: str) -> str:
     const effortEl = document.getElementById('effort');
     const pricingStatusEl = document.getElementById('pricingStatus');
     const sortEl = document.getElementById('sort');
+    const tableTitleEl = document.getElementById('tableTitle');
+    const tableCaptionEl = document.getElementById('tableCaption');
+    const callsViewEl = document.getElementById('callsView');
+    const threadsViewEl = document.getElementById('threadsView');
     const number = new Intl.NumberFormat();
+    const rowByRecordId = new Map(data.map(row => [row.record_id, row]));
+    const expandedThreads = new Set();
+    let activeView = 'calls';
     const money = (value, missingLabel = 'No price') => {{
       if (value === null || value === undefined) return missingLabel;
       const amount = Number(value) || 0;
@@ -290,6 +409,62 @@ def _html(payload: str) -> str:
       }});
       return rows;
     }}
+    function chronological(a, b) {{
+      const timeCompare = String(a.event_timestamp || '').localeCompare(String(b.event_timestamp || ''));
+      if (timeCompare !== 0) return timeCompare;
+      return Number(a.cumulative_total_tokens || 0) - Number(b.cumulative_total_tokens || 0);
+    }}
+    function sortThreads(groups) {{
+      groups.sort((a, b) => {{
+        if (sortEl.value === 'cost') return b.estimatedCost - a.estimatedCost;
+        if (sortEl.value === 'time') return String(b.latestActivity).localeCompare(String(a.latestActivity));
+        if (sortEl.value === 'cache') return a.cacheRatio - b.cacheRatio;
+        if (sortEl.value === 'context') return b.maxContextUse - a.maxContextUse;
+        return b.totalTokens - a.totalTokens;
+      }});
+      return groups;
+    }}
+    function pricingStatusFor(rows) {{
+      const priced = rows.filter(row => row.pricing_model);
+      const estimated = rows.filter(row => row.pricing_estimated);
+      if (priced.length === 0) return 'No price';
+      if (estimated.length === rows.length) return 'Estimated';
+      if (estimated.length > 0 || priced.length < rows.length) return 'Mixed';
+      return 'Configured';
+    }}
+    function groupThreads(rows) {{
+      const map = new Map();
+      for (const row of rows) {{
+        const key = row.thread_name || row.session_id || 'Unknown thread';
+        if (!map.has(key)) {{
+          map.set(key, {{ key, label: key, rows: [] }});
+        }}
+        map.get(key).rows.push(row);
+      }}
+      return sortThreads([...map.values()].map(group => {{
+        const calls = group.rows.slice().sort(chronological);
+        const totalTokens = calls.reduce((sum, row) => sum + Number(row.total_tokens || 0), 0);
+        const inputTokens = calls.reduce((sum, row) => sum + Number(row.input_tokens || 0), 0);
+        const cachedTokens = calls.reduce((sum, row) => sum + Number(row.cached_input_tokens || 0), 0);
+        const estimatedCost = calls.reduce((sum, row) => sum + Number(row.estimated_cost_usd || 0), 0);
+        const signalCount = calls.reduce((sum, row) => sum + (Array.isArray(row.efficiency_flags) ? row.efficiency_flags.length : 0), 0);
+        const latestActivity = calls.reduce((latest, row) => String(row.event_timestamp || '') > latest ? String(row.event_timestamp || '') : latest, '');
+        const maxContextUse = calls.reduce((max, row) => Math.max(max, Number(row.context_window_percent || 0)), 0);
+        return {{
+          key: group.key,
+          label: group.label,
+          calls,
+          callCount: calls.length,
+          latestActivity,
+          totalTokens,
+          estimatedCost,
+          cacheRatio: inputTokens ? cachedTokens / inputTokens : 0,
+          maxContextUse,
+          pricingStatus: pricingStatusFor(calls),
+          signalCount,
+        }};
+      }}));
+    }}
     function render() {{
       const rows = filtered();
       rowsEl.textContent = '';
@@ -306,6 +481,17 @@ def _html(payload: str) -> str:
       document.getElementById('priceCoverage').textContent = pct(totalTokens ? pricedTokens / totalTokens : 0);
       document.getElementById('estimatedTokens').textContent = number.format(estimatedTokens);
       document.getElementById('unpricedTokens').textContent = number.format(unpricedTokens);
+      callsViewEl.setAttribute('aria-pressed', activeView === 'calls' ? 'true' : 'false');
+      threadsViewEl.setAttribute('aria-pressed', activeView === 'threads' ? 'true' : 'false');
+      if (activeView === 'threads') {{
+        renderThreads(rows);
+      }} else {{
+        renderCalls(rows);
+      }}
+    }}
+    function renderCalls(rows) {{
+      tableTitleEl.textContent = 'Model Calls';
+      tableCaptionEl.textContent = 'Showing individual model calls.';
       for (const row of rows.slice(0, 500)) {{
         const tr = document.createElement('tr');
         const flags = Array.isArray(row.efficiency_flags) ? row.efficiency_flags : [];
@@ -322,6 +508,81 @@ def _html(payload: str) -> str:
         tr.addEventListener('mouseenter', () => showDetail(row));
         rowsEl.appendChild(tr);
       }}
+      if (!rows.length) {{
+        rowsEl.innerHTML = '<tr><td class="empty-state" colspan="8">No calls match the current filters.</td></tr>';
+      }}
+    }}
+    function renderThreads(rows) {{
+      const groups = groupThreads(rows);
+      tableTitleEl.textContent = 'Threads';
+      tableCaptionEl.textContent = `Showing ${{number.format(groups.length)}} threads from ${{number.format(rows.length)}} filtered calls. Click a thread to expand its calls.`;
+      for (const group of groups.slice(0, 500)) {{
+        const tr = document.createElement('tr');
+        const expanded = expandedThreads.has(group.key);
+        tr.className = 'thread-row';
+        tr.setAttribute('aria-expanded', expanded ? 'true' : 'false');
+        tr.innerHTML = `
+          <td>${{escapeHtml(truncate(group.latestActivity, 20))}}</td>
+          <td>
+            <div class="thread-title">
+              <span class="thread-toggle" aria-hidden="true">${{expanded ? '-' : '+'}}</span>
+              <span class="thread-meta">
+                <span class="thread-name">${{escapeHtml(truncate(group.label, 72))}}</span>
+                <span class="thread-subtle">${{number.format(group.callCount)}} calls - ${{group.pricingStatus}}</span>
+              </span>
+            </div>
+          </td>
+          <td><span class="pill">Thread</span></td>
+          <td>${{escapeHtml(group.pricingStatus)}}</td>
+          <td class="num">${{number.format(group.totalTokens)}}</td>
+          <td class="num">${{pricingConfigured ? money(group.estimatedCost) : 'Not configured'}}</td>
+          <td class="num">${{pct(group.cacheRatio)}}</td>
+          <td class="num">${{number.format(group.signalCount)}}</td>
+        `;
+        tr.addEventListener('click', () => {{
+          if (expandedThreads.has(group.key)) {{
+            expandedThreads.delete(group.key);
+          }} else {{
+            expandedThreads.add(group.key);
+          }}
+          render();
+        }});
+        tr.addEventListener('mouseenter', () => showThreadDetail(group));
+        rowsEl.appendChild(tr);
+        if (expanded) {{
+          rowsEl.appendChild(renderThreadCalls(group));
+        }}
+      }}
+      if (!groups.length) {{
+        rowsEl.innerHTML = '<tr><td class="empty-state" colspan="8">No threads match the current filters.</td></tr>';
+      }}
+    }}
+    function renderThreadCalls(group) {{
+      const tr = document.createElement('tr');
+      tr.className = 'thread-child-row';
+      const calls = group.calls.map(row => {{
+        const flags = Array.isArray(row.efficiency_flags) ? row.efficiency_flags : [];
+        return `
+          <tr class="thread-call-row" data-record-id="${{escapeHtml(row.record_id || '')}}">
+            <td>${{escapeHtml(truncate(row.event_timestamp, 20))}}</td>
+            <td>${{escapeHtml(short(row.model))}}</td>
+            <td>${{escapeHtml(short(row.effort))}}</td>
+            <td class="num">${{number.format(row.total_tokens || 0)}}</td>
+            <td class="num">${{escapeHtml(row.pricing_estimated ? `${{money(row.estimated_cost_usd)}}*` : money(row.estimated_cost_usd))}}</td>
+            <td class="num">${{pct(row.cache_ratio)}}</td>
+            <td><div class="flags">${{flags.slice(0, 2).map(flag => `<span class="flag">${{escapeHtml(flag)}}</span>`).join('')}}</div></td>
+          </tr>
+        `;
+      }}).join('');
+      tr.innerHTML = `
+        <td class="child-cell" colspan="8">
+          <table class="thread-call-table" aria-label="${{escapeHtml(group.label)}} calls">
+            <thead><tr><th>Time</th><th>Model</th><th>Effort</th><th class="num">Last Call</th><th class="num">Cost</th><th class="num">Cache</th><th>Signals</th></tr></thead>
+            <tbody>${{calls}}</tbody>
+          </table>
+        </td>
+      `;
+      return tr;
     }}
     function showDetail(row) {{
       const fields = [
@@ -350,6 +611,32 @@ def _html(payload: str) -> str:
       ];
       detailEl.innerHTML = '<dl>' + fields.map(([key, value]) => `<dt>${{escapeHtml(key)}}</dt><dd>${{escapeHtml(short(value))}}</dd>`).join('') + '</dl>';
     }}
+    function showThreadDetail(group) {{
+      const fields = [
+        ['Thread', group.label],
+        ['Latest activity', group.latestActivity],
+        ['Calls', number.format(group.callCount)],
+        ['Total tokens', number.format(group.totalTokens)],
+        ['Estimated cost', pricingConfigured ? money(group.estimatedCost) : 'Not configured'],
+        ['Cache ratio', pct(group.cacheRatio)],
+        ['Pricing status', group.pricingStatus],
+        ['Efficiency signals', number.format(group.signalCount)],
+        ['Max context use', pct(group.maxContextUse)],
+      ];
+      detailEl.innerHTML = '<dl>' + fields.map(([key, value]) => `<dt>${{escapeHtml(key)}}</dt><dd>${{escapeHtml(short(value))}}</dd>`).join('') + '</dl>';
+    }}
+    function setView(view) {{
+      activeView = view;
+      render();
+    }}
+    callsViewEl.addEventListener('click', () => setView('calls'));
+    threadsViewEl.addEventListener('click', () => setView('threads'));
+    rowsEl.addEventListener('mouseover', event => {{
+      const callRow = event.target.closest('.thread-call-row');
+      if (!callRow || !rowsEl.contains(callRow)) return;
+      const row = rowByRecordId.get(callRow.dataset.recordId);
+      if (row) showDetail(row);
+    }});
     [searchEl, modelEl, effortEl, pricingStatusEl, sortEl].forEach(el => el.addEventListener('input', render));
     render();
   </script>

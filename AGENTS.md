@@ -14,6 +14,8 @@ This repo builds a local Codex plugin and dashboard that track aggregate token u
 ## Repo Layout
 
 - `src/codex_usage_tracker/` - parser, SQLite store, reports, dashboard, CLI, and MCP server.
+- `src/codex_usage_tracker/context.py` - on-demand raw-context reader for one selected usage record.
+- `src/codex_usage_tracker/server.py` - localhost dashboard server with lazy context endpoint.
 - `~/.codex-usage-tracker/pricing.json` - optional local-only pricing config, never committed.
 - `.codex-plugin/plugin.json` - Codex plugin manifest.
 - `.mcp.json` - MCP server configuration for Codex.
@@ -37,6 +39,7 @@ python -m compileall src
 codex-usage-tracker update-pricing --output /tmp/codex-usage-pricing.json
 codex-usage-tracker doctor
 codex-usage-tracker dashboard --output /tmp/codex-usage-dashboard.html
+codex-usage-tracker serve-dashboard --help
 codex-usage-tracker pricing-coverage
 codex-usage-tracker summary --preset by-subagent-role
 codex-usage-tracker expensive --limit 5
@@ -46,6 +49,7 @@ codex-usage-tracker expensive --limit 5
 
 - Never commit real Codex session logs.
 - Never store raw prompts, assistant text, tool outputs, pasted secrets, or message snippets.
+- Raw context may be read only on demand from original local JSONL files; never persist it to SQLite, CSV, generated HTML, fixtures based on real logs, or commits.
 - Store only selected aggregate session metadata for subagents; do not persist raw session instructions or source JSON.
 - Keep fixture data synthetic.
 - Keep local SQLite databases, CSV exports, HTML dashboards, caches, and virtualenvs out of git.
@@ -60,5 +64,6 @@ codex-usage-tracker expensive --limit 5
 - Doctor, summary presets, dashboard, and expensive-call views work from CLI and MCP wrappers.
 - Pricing coverage clearly separates configured, estimated, and unpriced model usage.
 - Dashboard Calls and Threads views share filters, totals, and aggregate-only hover details.
+- Dashboard context loading is lazy, localhost-only, explicit, redacted, and not embedded in the static HTML payload.
 - Subagent calls preserve logged parent-session metadata, and auto-review attachment is clearly marked when inferred.
 - Tests and compile checks pass.

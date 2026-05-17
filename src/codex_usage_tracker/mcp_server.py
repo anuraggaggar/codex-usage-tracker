@@ -2,12 +2,14 @@
 
 from __future__ import annotations
 
+import json
+from datetime import date, timedelta
 from pathlib import Path
 from typing import Any
-from datetime import date, timedelta
 
 from mcp.server.fastmcp import FastMCP
 
+from codex_usage_tracker.context import DEFAULT_CONTEXT_CHARS, load_call_context
 from codex_usage_tracker.dashboard import generate_dashboard
 from codex_usage_tracker.diagnostics import run_doctor
 from codex_usage_tracker.formatting import (
@@ -96,6 +98,23 @@ def session_usage(session_id: str | None = None, limit: int = 200) -> str:
 
     rows = query_session_usage(DEFAULT_DB_PATH, session_id=session_id, limit=limit)
     return format_session(rows)
+
+
+@mcp.tool()
+def usage_call_context(
+    record_id: str,
+    max_chars: int = DEFAULT_CONTEXT_CHARS,
+    include_tool_output: bool = False,
+) -> str:
+    """Load one model call's logged local context on demand from its source JSONL file."""
+
+    payload = load_call_context(
+        record_id=record_id,
+        db_path=DEFAULT_DB_PATH,
+        max_chars=max_chars,
+        include_tool_output=include_tool_output,
+    )
+    return json.dumps(payload, indent=2)
 
 
 @mcp.tool()

@@ -246,6 +246,28 @@ def query_session_usage(
         return [_row_to_dict(row) for row in rows]
 
 
+def query_usage_record(
+    db_path: Path = DEFAULT_DB_PATH,
+    record_id: str | None = None,
+) -> dict[str, Any] | None:
+    """Return one aggregate usage row by stable record id."""
+
+    if not record_id:
+        return None
+    with connect(db_path) as conn:
+        init_db(conn)
+        row = conn.execute(
+            """
+            SELECT *
+            FROM usage_events
+            WHERE record_id = ?
+            LIMIT 1
+            """,
+            (record_id,),
+        ).fetchone()
+        return _row_to_dict(row) if row is not None else None
+
+
 def query_dashboard_events(
     db_path: Path = DEFAULT_DB_PATH, limit: int = 5000, since: str | None = None
 ) -> list[dict[str, Any]]:

@@ -271,6 +271,60 @@ def _html(payload: str) -> str:
     .detail dl {{ display: grid; grid-template-columns: minmax(120px, 0.6fr) minmax(0, 1fr); gap: 8px 14px; margin: 0; }}
     .detail dt {{ font-weight: 720; color: var(--ink); }}
     .detail dd {{ margin: 0; overflow-wrap: anywhere; }}
+    .context-actions {{
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin-top: 14px;
+      padding-top: 12px;
+      border-top: 1px solid var(--line);
+    }}
+    .context-button {{
+      min-height: 32px;
+      padding: 6px 10px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: var(--panel);
+      color: var(--blue);
+      font-size: 12px;
+      font-weight: 760;
+      cursor: pointer;
+    }}
+    .context-button:hover {{ background: #eff6ff; }}
+    .context-button.secondary {{ color: var(--muted); }}
+    .context-result {{
+      margin-top: 12px;
+      padding-top: 12px;
+      border-top: 1px solid var(--line);
+    }}
+    .context-note {{ margin: 0 0 10px; font-size: 12px; color: var(--muted); }}
+    .context-entry {{
+      margin: 10px 0;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      overflow: hidden;
+      background: #fbfcfe;
+    }}
+    .context-entry-header {{
+      display: flex;
+      justify-content: space-between;
+      gap: 10px;
+      padding: 8px 10px;
+      border-bottom: 1px solid var(--line);
+      color: var(--muted);
+      font-size: 12px;
+      font-weight: 720;
+    }}
+    .context-entry pre {{
+      margin: 0;
+      padding: 10px;
+      max-height: 360px;
+      overflow: auto;
+      white-space: pre-wrap;
+      overflow-wrap: anywhere;
+      color: var(--ink);
+      font: 12px/1.45 ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
+    }}
     @media (max-width: 980px) {{
       .filters, .cards, .grid {{ grid-template-columns: 1fr; }}
       main, header {{ padding-left: 16px; padding-right: 16px; }}
@@ -284,7 +338,7 @@ def _html(payload: str) -> str:
 <body>
   <header>
     <h1>Codex Usage Dashboard</h1>
-    <p>Aggregate-only token analytics from local Codex logs. Hover a table row to inspect exact last-call and cumulative usage without exposing raw chat text.</p>
+    <p>Aggregate-only token analytics from local Codex logs. Hover a table row to inspect exact usage fields; raw logged context is loaded only on demand from the local dashboard server.</p>
     <p id="pricingSource" class="source-line"></p>
   </header>
   <main>
@@ -721,6 +775,76 @@ def _html(payload: str) -> str:
       `;
       return tr;
     }}
+    function contextControls(row) {{
+      const fileMode = window.location.protocol === 'file:';
+      const disabled = fileMode ? ' disabled' : '';
+      const hint = fileMode
+        ? 'Open this dashboard with codex-usage-tracker serve-dashboard to load raw context on demand.'
+        : 'Context is not embedded in this dashboard. Press a button to read this call from the local JSONL source.';
+      return `
+        <div class="context-actions">
+          <button class="context-button" type="button" data-context-load${{disabled}}>Load context</button>
+          <button class="context-button secondary" type="button" data-context-load-output${{disabled}}>Include tool output</button>
+        </div>
+        <div id="contextResult" class="context-result"><p class="context-note">${{escapeHtml(hint)}}</p></div>
+      `;
+    }}
+    function bindContextButtons(row) {{
+      const loadButton = detailEl.querySelector('[data-context-load]');
+      const outputButton = detailEl.querySelector('[data-context-load-output]');
+      if (loadButton) loadButton.addEventListener('click', () => loadContext(row, false));
+      if (outputButton) outputButton.addEventListener('click', () => loadContext(row, true));
+    }}
+    async function loadContext(row, includeToolOutput) {{
+      const target = document.getElementById('contextResult');
+      if (!target) return;
+      if (!row.record_id) {{
+        target.innerHTML = '<p class="context-note">This row has no record id for context lookup.</p>';
+        return;
+      }}
+      target.innerHTML = '<p class="context-note">Loading local context...</p>';
+      const params = new URLSearchParams({{ record_id: row.record_id }});
+      if (includeToolOutput) params.set('include_tool_output', '1');
+      try {{
+        const response = await fetch(`/api/context?${{params.toString()}}`, {{
+          headers: {{ 'Accept': 'application/json' }},
+          cache: 'no-store',
+        }});
+        if (!response.ok) {{
+          const errorText = response.status === 404
+            ? 'Context API is unavailable here. Run codex-usage-tracker serve-dashboard --open for on-demand context loading.'
+            : `Context API returned HTTP ${{response.status}}.`;
+          throw new Error(errorText);
+        }}
+        const payload = await response.json();
+        target.innerHTML = renderContext(payload);
+      }} catch (error) {{
+        target.innerHTML = `<p class="context-note">${{escapeHtml(error.message || String(error))}}</p>`;
+      }}
+    }}
+    function renderContext(payload) {{
+      const entries = Array.isArray(payload.entries) ? payload.entries : [];
+      const source = payload.source || {{}};
+      const omitted = payload.omitted || {{}};
+      const note = [
+        'Loaded on demand from local JSONL.',
+        payload.raw_context_persisted === false ? 'Not persisted to SQLite or dashboard HTML.' : '',
+        payload.include_tool_output ? 'Tool output included with redaction and size limits.' : 'Tool output omitted by default.',
+        source.file ? `Source: ${{source.file}}:${{source.line_number || ''}}` : '',
+        omitted.older_entries ? `${{number.format(omitted.older_entries)}} older entries omitted.` : '',
+        omitted.over_budget_chars ? `${{number.format(omitted.over_budget_chars)}} chars over budget omitted.` : '',
+      ].filter(Boolean).join(' ');
+      const body = entries.map(entry => `
+        <div class="context-entry">
+          <div class="context-entry-header">
+            <span>${{escapeHtml(entry.label || entry.type || 'entry')}}</span>
+            <span>${{escapeHtml([entry.timestamp, entry.line_number ? `line ${{entry.line_number}}` : ''].filter(Boolean).join(' - '))}}</span>
+          </div>
+          <pre>${{escapeHtml(entry.text || '')}}</pre>
+        </div>
+      `).join('');
+      return `<p class="context-note">${{escapeHtml(note)}}</p>${{body || '<p class="context-note">No context entries found for this call.</p>'}}`;
+    }}
     function showDetail(row) {{
       const attachment = rowAttachment(row);
       const fields = [
@@ -753,7 +877,8 @@ def _html(payload: str) -> str:
         ['Context use', pct(row.context_window_percent)],
         ['Source line', `${{row.source_file}}:${{row.line_number}}`],
       ];
-      detailEl.innerHTML = '<dl>' + fields.map(([key, value]) => `<dt>${{escapeHtml(key)}}</dt><dd>${{escapeHtml(short(value))}}</dd>`).join('') + '</dl>';
+      detailEl.innerHTML = '<dl>' + fields.map(([key, value]) => `<dt>${{escapeHtml(key)}}</dt><dd>${{escapeHtml(short(value))}}</dd>`).join('') + '</dl>' + contextControls(row);
+      bindContextButtons(row);
     }}
     function showThreadDetail(group) {{
       const fields = [

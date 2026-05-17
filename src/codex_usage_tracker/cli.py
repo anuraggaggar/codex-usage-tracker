@@ -8,6 +8,7 @@ import webbrowser
 from datetime import date, timedelta
 from pathlib import Path
 
+from codex_usage_tracker.context import DEFAULT_CONTEXT_CHARS, load_call_context
 from codex_usage_tracker.dashboard import generate_dashboard
 from codex_usage_tracker.diagnostics import run_doctor
 from codex_usage_tracker.formatting import (
@@ -39,6 +40,7 @@ from codex_usage_tracker.store import (
     query_summary,
     refresh_usage_index,
 )
+from codex_usage_tracker.server import serve_dashboard
 
 
 def main() -> int:
@@ -92,6 +94,19 @@ def main() -> int:
     session.add_argument("session_id", nargs="?")
     session.add_argument("--limit", type=int, default=200)
 
+    context = subparsers.add_parser(
+        "context",
+        help="Load raw logged context for one usage record on demand",
+    )
+    context.add_argument("record_id")
+    context.add_argument("--max-chars", type=int, default=DEFAULT_CONTEXT_CHARS)
+    context.add_argument("--max-entries", type=int, default=80)
+    context.add_argument(
+        "--include-tool-output",
+        action="store_true",
+        help="Include redacted, size-limited tool output in the on-demand context.",
+    )
+
     dashboard = subparsers.add_parser("dashboard", help="Generate static dashboard")
     dashboard.add_argument("--output", type=Path, default=DEFAULT_DASHBOARD_PATH)
     dashboard.add_argument("--limit", type=int, default=5000)
@@ -110,6 +125,24 @@ def main() -> int:
         help="Refresh the SQLite index before generating the dashboard",
     )
     open_dashboard.add_argument("--codex-home", type=Path, default=DEFAULT_CODEX_HOME)
+
+    serve = subparsers.add_parser(
+        "serve-dashboard",
+        help="Serve dashboard with lazy localhost context loading",
+    )
+    serve.add_argument("--output", type=Path, default=DEFAULT_DASHBOARD_PATH)
+    serve.add_argument("--limit", type=int, default=5000)
+    serve.add_argument("--since", help="Only include calls at or after this ISO date/time")
+    serve.add_argument("--host", default="127.0.0.1")
+    serve.add_argument("--port", type=int, default=8765)
+    serve.add_argument("--context-chars", type=int, default=DEFAULT_CONTEXT_CHARS)
+    serve.add_argument("--open", action="store_true")
+    serve.add_argument(
+        "--refresh",
+        action="store_true",
+        help="Refresh the SQLite index before generating and serving the dashboard",
+    )
+    serve.add_argument("--codex-home", type=Path, default=DEFAULT_CODEX_HOME)
 
     expensive = subparsers.add_parser("expensive", help="Show largest last-call usage rows")
     expensive.add_argument("--limit", type=int, default=20)
@@ -189,6 +222,17 @@ def main() -> int:
         print(format_session(query_session_usage(args.db, args.session_id, args.limit)))
         return 0
 
+    if args.command == "context":
+        payload = load_call_context(
+            record_id=args.record_id,
+            db_path=args.db,
+            max_chars=args.max_chars,
+            max_entries=args.max_entries,
+            include_tool_output=args.include_tool_output,
+        )
+        print(json.dumps(payload, indent=2))
+        return 0
+
     if args.command == "dashboard":
         output = generate_dashboard(
             db_path=args.db,
@@ -214,6 +258,22 @@ def main() -> int:
         )
         print(f"Opening dashboard at {output}")
         webbrowser.open(output.resolve().as_uri())
+        return 0
+
+    if args.command == "serve-dashboard":
+        if args.refresh:
+            refresh_usage_index(codex_home=args.codex_home, db_path=args.db)
+        serve_dashboard(
+            db_path=args.db,
+            output_path=args.output,
+            pricing_path=args.pricing,
+            limit=args.limit,
+            since=args.since,
+            host=args.host,
+            port=args.port,
+            context_chars=args.context_chars,
+            open_browser=args.open,
+        )
         return 0
 
     if args.command == "expensive":

@@ -1,6 +1,6 @@
 {
   "name": "codex-usage-tracker",
-  "version": "0.1.6",
+  "version": "0.1.7",
   "description": "Track aggregate Codex token usage from local session logs.",
   "author": {
     "name": "Douglas Monsky"
@@ -20,7 +20,7 @@
   "interface": {
     "displayName": "Codex Usage Tracker",
     "shortDescription": "Local aggregate token usage analytics for Codex",
-    "longDescription": "Read local Codex session logs, aggregate exact token usage counters, and generate summaries, CSV exports, and a hoverable dashboard without storing raw chat text.",
+    "longDescription": "Read local Codex session logs, aggregate exact token usage counters, and generate summaries, CSV exports, and a hoverable dashboard with optional localhost-only raw context loading.",
     "developerName": "Douglas Monsky",
     "category": "Productivity",
     "capabilities": [
@@ -39,6 +39,7 @@
       "Update Codex usage pricing from OpenAI docs",
       "Generate a Codex usage dashboard",
       "Generate a threaded Codex usage dashboard",
+      "Serve a Codex dashboard with on-demand context",
       "Show my Codex subagent usage",
       "Export my Codex token usage CSV"
     ],

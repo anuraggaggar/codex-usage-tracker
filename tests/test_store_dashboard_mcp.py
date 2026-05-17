@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+from codex_usage_tracker.context import load_call_context
 from codex_usage_tracker.dashboard import generate_dashboard
 from codex_usage_tracker.diagnostics import run_doctor
 from codex_usage_tracker.pricing import (
@@ -74,6 +75,24 @@ def test_dashboard_and_csv_are_aggregate_only(tmp_path: Path) -> None:
     assert "Thread attachment" in dashboard
     assert "Subagent type" in dashboard
     assert "Auto-review" in dashboard
+    assert "Load context" in dashboard
+
+
+def test_context_loads_raw_log_only_on_demand(tmp_path: Path) -> None:
+    codex_home = _make_codex_home(tmp_path)
+    db_path = tmp_path / "usage.sqlite3"
+    refresh_usage_index(codex_home=codex_home, db_path=db_path)
+    rows = query_session_usage(db_path=db_path, session_id=SESSION_ID)
+
+    context = load_call_context(rows[0]["record_id"], db_path=db_path)
+    context_text = json.dumps(context)
+
+    assert context["loaded_on_demand"] is True
+    assert context["raw_context_persisted"] is False
+    assert "SECRET RAW PROMPT" in context_text
+    assert "sk" + "-proj-" not in context_text
+    assert "[REDACTED_OPENAI_KEY]" in context_text
+    assert any(entry["label"] == "message / user" for entry in context["entries"])
 
 
 def test_mcp_wrappers_smoke(tmp_path: Path, monkeypatch) -> None:
@@ -95,6 +114,8 @@ def test_mcp_wrappers_smoke(tmp_path: Path, monkeypatch) -> None:
     expensive = mcp_server.most_expensive_usage_calls(limit=1)
     pricing_coverage = mcp_server.usage_pricing_coverage()
     session = mcp_server.session_usage(session_id=SESSION_ID)
+    record_id = query_session_usage(db_path=db_path, session_id=SESSION_ID)[0]["record_id"]
+    context = mcp_server.usage_call_context(record_id=record_id)
     dashboard = mcp_server.generate_usage_dashboard()
     pricing_update = mcp_server.update_usage_pricing_config()
     doctor = mcp_server.usage_doctor()
@@ -105,6 +126,8 @@ def test_mcp_wrappers_smoke(tmp_path: Path, monkeypatch) -> None:
     assert "Most expensive Codex calls" in expensive
     assert "Codex pricing coverage" in pricing_coverage
     assert SESSION_ID in session
+    assert "SECRET RAW PROMPT" in context
+    assert "sk" + "-proj-" not in context
     assert dashboard["dashboard_path"] == str(dashboard_path)
     assert pricing_update["model_count"] == 1
     assert pricing_update["source_url"] == "https://example.test/pricing.md"
@@ -207,7 +230,14 @@ def _make_codex_home(tmp_path: Path) -> Path:
                 {
                     "type": "message",
                     "role": "user",
-                    "content": [{"type": "input_text", "text": "SECRET RAW PROMPT"}],
+                    "content": [
+                        {
+                            "type": "input_text",
+                            "text": "SECRET RAW PROMPT "
+                            + "sk"
+                            + "-proj-abcdefghijklmnopqrstuvwxyz123456",
+                        }
+                    ],
                 },
             ),
             _token_event(100, 100),

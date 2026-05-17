@@ -7,13 +7,14 @@ Local Codex plugin and dashboard for tracking aggregate token usage from Codex s
 - Reads local Codex JSONL logs from `~/.codex/sessions/**/*.jsonl`.
 - Optionally includes `~/.codex/archived_sessions/*.jsonl`.
 - Stores aggregate-only usage metrics in local SQLite.
-- Exposes MCP tools for refresh, summaries, session detail, CSV export, and dashboard generation.
+- Exposes MCP tools for refresh, summaries, session detail, lazy call context, CSV export, and dashboard generation.
 - Generates a static hoverable dashboard with flat calls and threaded-by-thread views.
+- Can serve the dashboard from localhost so raw logged context is loaded only after a row action.
 - Provides a read-only doctor command for local plugin/MCP setup checks.
 - Optionally estimates costs from a local pricing file that can be refreshed from OpenAI's published pricing docs.
 - Tracks aggregate subagent metadata, including explicit parent session ids when Codex logs them.
 
-The tracker intentionally does not store prompts, assistant messages, tool outputs, pasted secrets, or raw transcript snippets.
+The tracker intentionally does not store prompts, assistant messages, tool outputs, pasted secrets, or raw transcript snippets in SQLite, CSV exports, or generated dashboard HTML. The optional localhost server can read redacted, size-limited context from the original JSONL file on demand.
 
 ## Setup
 
@@ -47,6 +48,14 @@ codex-usage-tracker open-dashboard
 
 The dashboard opens in the flat Calls view. Use the Calls/Threads toggle to group filtered usage by thread, then click a thread row to expand its calls in chronological order. Spawned subagents with a logged parent session are attached to that parent thread. Guardian `codex-auto-review` sessions do not currently log a parent session id, so the dashboard attaches them to the nearest named thread with the same cwd and marks that attachment as inferred.
 
+Serve the dashboard with lazy raw-context loading:
+
+```bash
+codex-usage-tracker serve-dashboard --open
+```
+
+When served this way, each call detail panel gets a `Load context` action. Pressing it fetches only that call's logged turn context from the original local JSONL source. Tool output is omitted by default; the `Include tool output` action loads redacted, size-limited tool output for that call. None of this raw context is written to SQLite, CSV, or the generated HTML.
+
 Show a summary:
 
 ```bash
@@ -64,6 +73,12 @@ Show one session:
 
 ```bash
 codex-usage-tracker session <session-id>
+```
+
+Load one call's logged context on demand:
+
+```bash
+codex-usage-tracker context <record-id>
 ```
 
 Export CSV:
@@ -106,6 +121,7 @@ Restart Codex after registration so it can discover the plugin. The installer sy
 - `usage_doctor`
 - `usage_summary`
 - `session_usage`
+- `usage_call_context`
 - `most_expensive_usage_calls`
 - `usage_pricing_coverage`
 - `generate_usage_dashboard`
@@ -122,7 +138,7 @@ The SQLite database is stored at `~/.codex-usage-tracker/usage.sqlite3` by defau
 - token counts and derived efficiency ratios
 - subagent source, role, nickname, and parent session id when present
 
-Raw chat text and tool outputs are ignored by the parser and are never written to the tracker database or dashboard.
+Raw chat text and tool outputs are ignored by the parser and are never written to the tracker database, CSV exports, or generated dashboard HTML. `usage_call_context`, `codex-usage-tracker context`, and the `serve-dashboard` context endpoint read a single source JSONL file only when explicitly requested, redact common secret patterns, and cap returned text size.
 
 Cost estimates are calculated only from aggregate token fields and your local pricing config. They are omitted when no matching model price is configured. Pricing refreshes pull only OpenAI's public pricing markdown and do not send local usage data anywhere.
 
@@ -134,6 +150,7 @@ python -m compileall src
 codex-usage-tracker update-pricing --output /tmp/codex-usage-pricing.json
 codex-usage-tracker doctor
 codex-usage-tracker dashboard --output /tmp/codex-usage-dashboard.html
+codex-usage-tracker serve-dashboard --help
 codex-usage-tracker pricing-coverage
 codex-usage-tracker summary --preset by-subagent-role
 codex-usage-tracker expensive --limit 5

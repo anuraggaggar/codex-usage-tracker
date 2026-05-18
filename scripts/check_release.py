@@ -39,6 +39,7 @@ REQUIRED_FILES = [
     ".github/workflows/pricing-compat.yml",
     ".codex-plugin/plugin.json",
     ".mcp.json",
+    "skills/codex-usage-tracker/scripts/run_mcp.py",
     "src/codex_usage_tracker/plugin_data/assets/icon.svg",
     "src/codex_usage_tracker/plugin_data/docs/dashboard-guide.html",
     "src/codex_usage_tracker/plugin_data/docs/assets/dashboard-calls.png",
@@ -134,6 +135,14 @@ def _check_packaging_metadata() -> list[str]:
     scripts = project.get("scripts", {})
     if scripts.get("codex-usage-tracker") != "codex_usage_tracker.cli:main":
         failures.append("pyproject.toml is missing the codex-usage-tracker console script")
+    mcp_config = json.loads((REPO_ROOT / ".mcp.json").read_text(encoding="utf-8"))
+    mcp_server = mcp_config.get("mcpServers", {}).get("codex-usage-tracker", {})
+    if mcp_server.get("command") != "python3":
+        failures.append(".mcp.json should use the system python3 bootstrap launcher")
+    if mcp_server.get("args") != ["./skills/codex-usage-tracker/scripts/run_mcp.py"]:
+        failures.append(".mcp.json should point at the bundled MCP bootstrap launcher")
+    if mcp_server.get("startup_timeout_sec") != 120:
+        failures.append(".mcp.json should allow enough startup time for first-run runtime bootstrap")
     return failures
 
 

@@ -101,6 +101,10 @@ def test_dashboard_and_csv_are_aggregate_only(tmp_path: Path) -> None:
     assert "detail-section" in dashboard
     assert "time-cell" in dashboard
     assert "formatTimestamp" in dashboard
+    assert "scrollbar-gutter: stable" in dashboard
+    assert "overflow-y: scroll" in dashboard
+    assert "formatTimestamp(pricingSource.fetched_at)" in dashboard
+    assert "formatTimestamp(nextPayload.refreshed_at)" in dashboard
     assert "threadModelSummary" in dashboard
     assert "model-pill" in dashboard
     assert "Back to top" in dashboard

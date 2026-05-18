@@ -501,9 +501,28 @@ def _html(payload: str) -> str:
       flex: 1 1 auto;
       padding: 14px 16px;
       min-height: 280px;
-      overflow: auto;
+      overflow-x: hidden;
+      overflow-y: scroll;
+      scrollbar-gutter: stable;
+      scrollbar-width: thin;
+      scrollbar-color: #94a3b8 #eef2f8;
       color: var(--muted);
       line-height: 1.45;
+    }}
+    .detail::-webkit-scrollbar {{
+      width: 10px;
+    }}
+    .detail::-webkit-scrollbar-track {{
+      background: #eef2f8;
+      border-left: 1px solid var(--line);
+    }}
+    .detail::-webkit-scrollbar-thumb {{
+      background: #94a3b8;
+      border: 2px solid #eef2f8;
+      border-radius: 999px;
+    }}
+    .detail::-webkit-scrollbar-thumb:hover {{
+      background: #64748b;
     }}
     .detail dl {{ display: grid; grid-template-columns: minmax(120px, 0.6fr) minmax(0, 1fr); gap: 8px 14px; margin: 0; }}
     .detail dt {{ font-weight: 720; color: var(--ink); }}
@@ -907,10 +926,12 @@ def _html(payload: str) -> str:
         const sourceParts = [
           pricingSource.name || 'Pricing source',
           pricingSource.tier ? `${{pricingSource.tier}} tier` : '',
-          pricingSource.fetched_at ? `fetched ${{pricingSource.fetched_at}}` : '',
+          pricingSource.fetched_at ? `fetched ${{formatTimestamp(pricingSource.fetched_at)}}` : '',
         ].filter(Boolean);
         sourceEl.textContent = `Costs: ${{sourceParts.join(' · ')}}`;
-        sourceEl.title = 'Internal Codex labels may use marked best-guess estimates.';
+        sourceEl.title = pricingSource.fetched_at
+          ? `Fetched from ${{pricingSource.url}} at ${{formatTimestampTitle(pricingSource.fetched_at)}}. Internal Codex labels may use marked best-guess estimates.`
+          : 'Internal Codex labels may use marked best-guess estimates.';
       }} else {{
         sourceEl.textContent = pricingConfigured ? '' : 'Costs unavailable';
         sourceEl.title = pricingConfigured ? '' : 'Run codex-usage-tracker update-pricing to configure estimated costs.';
@@ -1587,11 +1608,6 @@ def _html(payload: str) -> str:
       currentPage = 1;
       render();
     }}
-    function localTime(value) {{
-      const date = value ? new Date(value) : new Date();
-      if (Number.isNaN(date.getTime())) return '';
-      return date.toLocaleTimeString([], {{ hour: 'numeric', minute: '2-digit', second: '2-digit' }});
-    }}
     function updateLiveStatus(message) {{
       liveStatusEl.textContent = message;
     }}
@@ -1636,7 +1652,7 @@ def _html(payload: str) -> str:
         const indexed = result.inserted_or_updated_events === undefined
           ? ''
           : ` Indexed ${{number.format(result.inserted_or_updated_events)}} aggregate rows from ${{number.format(result.scanned_files || 0)}} logs.`;
-        updateLiveStatus(`Updated ${{localTime(nextPayload.refreshed_at)}}. ${{loadedRowsDescription()}}.${{indexed}}`);
+        updateLiveStatus(`Updated ${{formatTimestamp(nextPayload.refreshed_at)}}. ${{loadedRowsDescription()}}.${{indexed}}`);
       }} catch (error) {{
         const message = error.message || String(error);
         updateLiveStatus(`Live refresh unavailable: ${{message}}${{manual ? '. Reload this page after regenerating a static dashboard, or run codex-usage-tracker serve-dashboard.' : ''}}`);

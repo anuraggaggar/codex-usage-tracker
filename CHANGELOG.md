@@ -13,6 +13,7 @@
 - Prefer non-review models in mixed thread model summaries, add fit-to-width model labels, and add a scroll-aware `Top` button.
 - Hide single-page dashboard pagination and keep multi-page controls compact in the toolbar.
 - Render fetched and refreshed timestamps as local human-readable date-times and make the call details scrollbar visible.
+- Rewrite the README around practical usage investigations, long-chat context growth, and pre-release limitations.
 - Add a screenshot-driven dashboard guide built from synthetic aggregate fixture data.
 - Preserve requested virtualenv Python paths during plugin install instead of resolving through interpreter symlinks.
 - Keep generated dashboards, SQLite databases, CSV exports, and raw Codex logs out of git.

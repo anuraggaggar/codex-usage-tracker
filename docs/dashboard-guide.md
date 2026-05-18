@@ -93,6 +93,20 @@ When served from localhost, the details panel includes `Load context` and `Inclu
 6. Filter to one model or reasoning effort when comparing efficiency.
 7. Click into a row and use `Load context` only when aggregate fields are not enough to explain the call.
 
+## Investigating Long Chat Growth
+
+Long-running Codex chats can carry a surprising amount of context into later turns. Prompt caching can reduce the cost of repeated input, but it does not make a large conversation free. Later calls may still include a large cached prefix, new uncached input, reasoning output, and tool-related context.
+
+Use these dashboard fields together:
+
+- `Cached input`: repeated context Codex was able to reuse.
+- `Uncached input`: fresh context added by the current turn.
+- `Session cumulative`: the running total Codex logged for the session.
+- `Context use`: how much of the model's context window the call used.
+- `Cache ratio`: whether the call is mostly reused context or mostly new input.
+
+When a thread keeps growing but the old context is no longer helping, starting a fresh Codex thread may be more efficient than continuing to carry the same cached history forward.
+
 ## Privacy Model
 
 The dashboard is designed to be shareable as an aggregate report, but only after you review it like any generated artifact.

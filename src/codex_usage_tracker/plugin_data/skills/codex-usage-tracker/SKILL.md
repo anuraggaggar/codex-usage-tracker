@@ -5,6 +5,8 @@ description: Use when the user asks about Codex token usage, model/reasoning eff
 
 # Codex Usage Tracker
 
+Unofficial project: Codex Usage Tracker is independent and is not made by, affiliated with, endorsed by, sponsored by, or supported by OpenAI. OpenAI and Codex are trademarks of OpenAI.
+
 Use this plugin to inspect aggregate token usage from local Codex session logs.
 
 ## Privacy Boundary

@@ -5,7 +5,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "codex-usage-tracker"
 version = "0.2.0"
-description = "Local Codex plugin and dashboard for investigating aggregate token usage, costs, caching, and thread patterns."
+description = "Unofficial local Codex plugin and dashboard for investigating aggregate token usage, costs, caching, and thread patterns."
 readme = "README.md"
 requires-python = ">=3.10"
 authors = [

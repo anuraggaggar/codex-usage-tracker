@@ -2,6 +2,7 @@
 
 ## 0.2.0
 
+- Add prominent unofficial-project disclaimers to docs, dashboard output, and plugin metadata.
 - Harden malformed token-count parsing, SQLite concurrency, MCP raw-context opt-in, pricing parser diagnostics, bundled dashboard docs, and schema migrations.
 - Fix Python 3.10 compatibility for UTC timestamps and release checks.
 - Add package-owned Codex plugin installation with `codex-usage-tracker install-plugin`.

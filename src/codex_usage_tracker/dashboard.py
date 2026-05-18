@@ -167,6 +167,17 @@ def _html(payload: str, guide_href: str | None = None) -> str:
       color: #3346a3;
       font-weight: 760;
     }}
+    .disclaimer-chip {{
+      display: inline-flex;
+      align-items: center;
+      min-height: 24px;
+      padding: 2px 8px;
+      border: 1px solid #fed7aa;
+      border-radius: 999px;
+      background: #fff7ed;
+      color: #9a3412;
+      font-weight: 780;
+    }}
     .source-line {{ color: var(--muted); }}
     .guide-link {{
       color: var(--blue);
@@ -679,6 +690,7 @@ def _html(payload: str, guide_href: str | None = None) -> str:
       </div>
     </div>
     <div class="header-meta">
+      <span class="disclaimer-chip" title="Codex Usage Tracker is independent and is not made by, affiliated with, endorsed by, sponsored by, or supported by OpenAI. OpenAI and Codex are trademarks of OpenAI.">Unofficial project - not affiliated with OpenAI</span>
       <span class="status-chip">Aggregate only</span>
       <span id="liveStatus" class="live-status">Static snapshot loaded.</span>
       <span id="pricingSource" class="source-line"></span>

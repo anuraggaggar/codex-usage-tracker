@@ -114,6 +114,7 @@ def _check_docs() -> list[str]:
         "codex-usage-tracker install-plugin",
         "codex-usage-tracker doctor",
         "Data Privacy",
+        "not made by, affiliated with, endorsed by, sponsored by, or supported by OpenAI",
     ]:
         if required not in readme:
             failures.append(f"README.md is missing required install/privacy text: {required}")

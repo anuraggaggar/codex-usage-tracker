@@ -131,7 +131,7 @@ def _plugin_manifest() -> dict[str, Any]:
     return {
         "name": PLUGIN_NAME,
         "version": __version__,
-        "description": "Track aggregate Codex token usage from local session logs.",
+        "description": "Unofficial local tracker for aggregate Codex token usage from local session logs.",
         "author": {"name": "Douglas Monsky"},
         "homepage": "https://github.com/douglasmonsky/codex-usage-tracker",
         "repository": "https://github.com/douglasmonsky/codex-usage-tracker",
@@ -141,11 +141,13 @@ def _plugin_manifest() -> dict[str, Any]:
         "mcpServers": "./.mcp.json",
         "interface": {
             "displayName": "Codex Usage Tracker",
-            "shortDescription": "Local aggregate token usage analytics for Codex",
+            "shortDescription": "Unofficial local aggregate token usage analytics for Codex",
             "longDescription": (
-                "Read local Codex session logs, aggregate exact token usage counters, "
-                "and generate summaries, CSV exports, and a hoverable dashboard with "
-                "optional localhost-only raw context loading."
+                "Unofficial independent project, not made by, affiliated with, endorsed by, "
+                "sponsored by, or supported by OpenAI. Reads local Codex session logs, "
+                "aggregates exact token usage counters, and generates summaries, CSV "
+                "exports, and a hoverable dashboard with optional localhost-only raw "
+                "context loading."
             ),
             "developerName": "Douglas Monsky",
             "category": "Productivity",

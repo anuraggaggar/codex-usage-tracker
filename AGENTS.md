@@ -22,6 +22,7 @@ This repo builds a local Codex plugin and dashboard that track aggregate token u
 - `.codex-plugin/plugin.json` - Codex plugin manifest.
 - `.mcp.json` - MCP server configuration for Codex.
 - `scripts/install_local_plugin.py` - compatibility wrapper around `codex-usage-tracker install-plugin`.
+- `scripts/check_release.py` - release-readiness checks for docs, versions, packaging, wheel contents, and tracked secret patterns.
 - `.github/workflows/ci.yml` - GitHub Actions test and package build workflow.
 - `tests/` - synthetic fixtures and unit tests.
 
@@ -41,6 +42,7 @@ codex-usage-tracker install-plugin --python .venv/bin/python
 python -m pytest
 python -m compileall src
 python -m build
+python scripts/check_release.py --dist
 git diff --check
 codex-usage-tracker update-pricing --output /tmp/codex-usage-pricing.json
 codex-usage-tracker doctor
@@ -69,7 +71,9 @@ codex-usage-tracker expensive --limit 5
 - Dashboard is generated from aggregate-only JSON.
 - Doctor, summary presets, dashboard, and expensive-call views work from CLI and MCP wrappers.
 - `codex-usage-tracker install-plugin` can register the installed package without relying on a source-checkout symlink.
+- `python -m codex_usage_tracker` and `codex-usage-tracker --version` both work.
 - Wheel and source distribution builds include plugin assets and the Codex skill.
+- `scripts/check_release.py --dist` passes before any public release.
 - Pricing coverage clearly separates configured, estimated, and unpriced model usage.
 - Dashboard Calls and Threads views share filters, totals, and aggregate-only hover details.
 - Dashboard aggregate refresh is localhost-only and keeps generated HTML aggregate-only; context loading is lazy, localhost-only, explicit, redacted, and not embedded in the static HTML payload.

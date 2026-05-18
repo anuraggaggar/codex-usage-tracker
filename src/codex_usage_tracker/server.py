@@ -15,7 +15,11 @@ from urllib.parse import parse_qs, urlparse
 
 from codex_usage_tracker.context import DEFAULT_CONTEXT_CHARS, load_call_context
 from codex_usage_tracker.dashboard import dashboard_payload, generate_dashboard
-from codex_usage_tracker.paths import DEFAULT_CODEX_HOME, DEFAULT_DASHBOARD_PATH, DEFAULT_PRICING_PATH
+from codex_usage_tracker.paths import (
+    DEFAULT_CODEX_HOME,
+    DEFAULT_DASHBOARD_PATH,
+    DEFAULT_PRICING_PATH,
+)
 from codex_usage_tracker.store import refresh_usage_index
 
 
@@ -56,7 +60,7 @@ def serve_dashboard(
         refresh_lock=threading.Lock(),
     )
     server = ThreadingHTTPServer((host, port), handler)
-    url = f"http://{host}:{port}/{output.name}"
+    url = f"http://{_url_host(host)}:{port}/{output.name}"
     print(f"Serving Codex usage dashboard at {url}")
     print("Aggregate rows refresh through /api/usage; raw context is loaded only through /api/context after a row action.")
     if open_browser:
@@ -109,6 +113,13 @@ class _UsageDashboardHandler(SimpleHTTPRequestHandler):
 
     def end_headers(self) -> None:
         self.send_header("X-Content-Type-Options", "nosniff")
+        self.send_header("Referrer-Policy", "no-referrer")
+        self.send_header(
+            "Content-Security-Policy",
+            "default-src 'self'; script-src 'self' 'unsafe-inline'; "
+            "style-src 'self' 'unsafe-inline'; connect-src 'self'; "
+            "img-src 'self' data:; object-src 'none'; base-uri 'none'",
+        )
         super().end_headers()
 
     def log_message(self, format: str, *args: object) -> None:
@@ -228,3 +239,7 @@ def _validate_loopback_host(host: str) -> None:
         ) from exc
     if not address.is_loopback:
         raise ValueError("serve-dashboard refuses to expose raw context off localhost")
+
+
+def _url_host(host: str) -> str:
+    return f"[{host}]" if ":" in host and not host.startswith("[") else host

@@ -5,6 +5,10 @@
 - Add package-owned Codex plugin installation with `codex-usage-tracker install-plugin`.
 - Package plugin assets and the Codex skill into the Python wheel.
 - Add distribution metadata, source distribution manifest, and CI build checks.
+- Add `python -m codex_usage_tracker` support and CLI `--version` output.
+- Add release-readiness checks for version alignment, required docs, package data, built wheels, and tracked secret patterns.
+- Harden local dashboard server responses with browser security headers and safer IPv6 localhost URLs.
+- Preserve requested virtualenv Python paths during plugin install instead of resolving through interpreter symlinks.
 - Keep generated dashboards, SQLite databases, CSV exports, and raw Codex logs out of git.
 
 ## 0.1.13

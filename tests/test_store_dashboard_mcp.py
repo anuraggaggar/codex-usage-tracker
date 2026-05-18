@@ -67,13 +67,16 @@ def test_dashboard_and_csv_are_aggregate_only(tmp_path: Path) -> None:
     refresh_usage_index(codex_home=codex_home, db_path=db_path)
     dashboard_path = tmp_path / "dashboard.html"
     csv_path = tmp_path / "usage.csv"
+    all_csv_path = tmp_path / "usage-all.csv"
 
     generate_dashboard(db_path=db_path, output_path=dashboard_path, pricing_path=pricing_path)
     exported = export_usage_csv(output_path=csv_path, db_path=db_path)
+    exported_with_zero_limit = export_usage_csv(output_path=all_csv_path, db_path=db_path, limit=0)
 
     dashboard = dashboard_path.read_text(encoding="utf-8")
     csv_text = csv_path.read_text(encoding="utf-8")
     assert exported == 4
+    assert exported_with_zero_limit == 4
     assert "SECRET RAW PROMPT" not in dashboard
     assert "SECRET RAW PROMPT" not in csv_text
     assert "last call" in dashboard.lower()
@@ -130,6 +133,8 @@ def test_dashboard_server_usage_api_refreshes_aggregate_rows(tmp_path: Path) -> 
             f"http://127.0.0.1:{server.server_port}/api/usage?refresh=1&limit=2",
             timeout=5,
         ) as response:
+            content_security_policy = response.headers.get("Content-Security-Policy")
+            referrer_policy = response.headers.get("Referrer-Policy")
             limited_payload = json.loads(response.read().decode("utf-8"))
         with urllib.request.urlopen(  # noqa: S310 - local test server only
             f"http://127.0.0.1:{server.server_port}/api/usage?limit=all",
@@ -146,6 +151,9 @@ def test_dashboard_server_usage_api_refreshes_aggregate_rows(tmp_path: Path) -> 
     assert limited_payload["loaded_row_count"] == 2
     assert limited_payload["total_available_rows"] == 4
     assert limited_payload["limit"] == 2
+    assert content_security_policy is not None
+    assert "connect-src 'self'" in content_security_policy
+    assert referrer_policy == "no-referrer"
     assert len(all_payload["rows"]) == 4
     assert all_payload["loaded_row_count"] == 4
     assert all_payload["total_available_rows"] == 4

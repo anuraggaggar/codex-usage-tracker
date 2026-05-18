@@ -4,10 +4,12 @@ from __future__ import annotations
 
 import argparse
 import json
+import sys
 import webbrowser
 from datetime import date, timedelta
 from pathlib import Path
 
+from codex_usage_tracker import __version__
 from codex_usage_tracker.context import DEFAULT_CONTEXT_CHARS, load_call_context
 from codex_usage_tracker.dashboard import generate_dashboard
 from codex_usage_tracker.diagnostics import run_doctor
@@ -47,7 +49,18 @@ from codex_usage_tracker.server import serve_dashboard
 
 
 def main() -> int:
+    try:
+        return _main()
+    except BrokenPipeError:
+        return 1
+    except (FileExistsError, FileNotFoundError, PermissionError, RuntimeError, ValueError, OSError) as exc:
+        print(f"Error: {exc}", file=sys.stderr)
+        return 1
+
+
+def _main() -> int:
     parser = argparse.ArgumentParser(prog="codex-usage-tracker")
+    parser.add_argument("--version", action="version", version=f"%(prog)s {__version__}")
     parser.add_argument("--db", type=Path, default=DEFAULT_DB_PATH)
     parser.add_argument("--pricing", type=Path, default=DEFAULT_PRICING_PATH)
     subparsers = parser.add_subparsers(dest="command", required=True)

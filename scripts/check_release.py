@@ -1,0 +1,168 @@
+#!/usr/bin/env python3
+"""Release-readiness checks for Codex Usage Tracker."""
+
+from __future__ import annotations
+
+import argparse
+import json
+import re
+import subprocess
+import sys
+import tomllib
+import zipfile
+from pathlib import Path
+
+REPO_ROOT = Path(__file__).resolve().parents[1]
+SECRET_PATTERNS = {
+    "OpenAI API key": re.compile(r"\bsk-(?:proj-)?[A-Za-z0-9_-]{20,}"),
+    "GitHub token": re.compile(r"\b(?:ghp|github_pat)_[A-Za-z0-9_]{20,}"),
+    "Google API key": re.compile(r"\bAI" r"za[0-9A-Za-z_-]{20,}"),
+}
+REQUIRED_FILES = [
+    "README.md",
+    "LICENSE",
+    "CHANGELOG.md",
+    "CONTRIBUTING.md",
+    "SECURITY.md",
+    "MANIFEST.in",
+    "AGENTS.md",
+    "scripts/check_release.py",
+    ".github/workflows/ci.yml",
+    ".codex-plugin/plugin.json",
+    ".mcp.json",
+    "src/codex_usage_tracker/plugin_data/assets/icon.svg",
+    "src/codex_usage_tracker/plugin_data/skills/codex-usage-tracker/SKILL.md",
+]
+WHEEL_REQUIRED_MEMBERS = {
+    "codex_usage_tracker/plugin_data/assets/icon.svg",
+    "codex_usage_tracker/plugin_data/skills/codex-usage-tracker/SKILL.md",
+}
+
+
+def main() -> int:
+    parser = argparse.ArgumentParser()
+    parser.add_argument(
+        "--dist",
+        action="store_true",
+        help="Require and inspect the built wheel in dist/.",
+    )
+    args = parser.parse_args()
+
+    failures: list[str] = []
+    failures.extend(_check_required_files())
+    failures.extend(_check_versions())
+    failures.extend(_check_docs())
+    failures.extend(_check_packaging_metadata())
+    failures.extend(_check_tracked_files_for_secrets())
+    if args.dist:
+        failures.extend(_check_wheel())
+
+    if failures:
+        for failure in failures:
+            print(f"FAIL: {failure}", file=sys.stderr)
+        return 1
+    print("Release readiness checks passed.")
+    return 0
+
+
+def _check_required_files() -> list[str]:
+    return [f"missing required file: {path}" for path in REQUIRED_FILES if not (REPO_ROOT / path).exists()]
+
+
+def _check_versions() -> list[str]:
+    failures: list[str] = []
+    pyproject = tomllib.loads((REPO_ROOT / "pyproject.toml").read_text(encoding="utf-8"))
+    package_version = pyproject["project"]["version"]
+    init_text = (REPO_ROOT / "src/codex_usage_tracker/__init__.py").read_text(encoding="utf-8")
+    init_match = re.search(r'__version__\s*=\s*"([^"]+)"', init_text)
+    manifest = json.loads((REPO_ROOT / ".codex-plugin/plugin.json").read_text(encoding="utf-8"))
+    changelog = (REPO_ROOT / "CHANGELOG.md").read_text(encoding="utf-8")
+
+    if not init_match:
+        failures.append("src/codex_usage_tracker/__init__.py does not define __version__")
+    elif init_match.group(1) != package_version:
+        failures.append("__version__ does not match pyproject.toml project.version")
+    if manifest.get("version") != package_version:
+        failures.append(".codex-plugin/plugin.json version does not match pyproject.toml")
+    if f"## {package_version}" not in changelog:
+        failures.append("CHANGELOG.md does not contain an entry for the package version")
+    return failures
+
+
+def _check_docs() -> list[str]:
+    readme = (REPO_ROOT / "README.md").read_text(encoding="utf-8")
+    failures: list[str] = []
+    for required in [
+        "pipx install",
+        "codex-usage-tracker install-plugin",
+        "codex-usage-tracker doctor",
+        "Data Privacy",
+    ]:
+        if required not in readme:
+            failures.append(f"README.md is missing required install/privacy text: {required}")
+    return failures
+
+
+def _check_packaging_metadata() -> list[str]:
+    pyproject = tomllib.loads((REPO_ROOT / "pyproject.toml").read_text(encoding="utf-8"))
+    project = pyproject["project"]
+    failures: list[str] = []
+    if project.get("license") != "MIT":
+        failures.append("pyproject.toml should use SPDX license = \"MIT\"")
+    if "license-files" not in project:
+        failures.append("pyproject.toml should include license-files")
+    if "urls" not in project:
+        failures.append("pyproject.toml should include project.urls")
+    scripts = project.get("scripts", {})
+    if scripts.get("codex-usage-tracker") != "codex_usage_tracker.cli:main":
+        failures.append("pyproject.toml is missing the codex-usage-tracker console script")
+    return failures
+
+
+def _check_tracked_files_for_secrets() -> list[str]:
+    failures: list[str] = []
+    for path in _tracked_files():
+        if path.suffix in {".png", ".jpg", ".jpeg", ".gif", ".pdf", ".sqlite", ".db"}:
+            continue
+        try:
+            text = path.read_text(encoding="utf-8")
+        except UnicodeDecodeError:
+            continue
+        for label, pattern in SECRET_PATTERNS.items():
+            if pattern.search(text):
+                failures.append(f"possible {label} in tracked file: {path.relative_to(REPO_ROOT)}")
+    return failures
+
+
+def _tracked_files() -> list[Path]:
+    result = subprocess.run(
+        ["git", "ls-files"],
+        cwd=REPO_ROOT,
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    return [REPO_ROOT / line for line in result.stdout.splitlines() if line]
+
+
+def _check_wheel() -> list[str]:
+    wheels = sorted((REPO_ROOT / "dist").glob("codex_usage_tracker-*.whl"))
+    if not wheels:
+        return ["dist/ does not contain a codex_usage_tracker wheel"]
+    with zipfile.ZipFile(wheels[-1]) as wheel:
+        names = set(wheel.namelist())
+    failures = [
+        f"wheel is missing required member: {member}"
+        for member in sorted(WHEEL_REQUIRED_MEMBERS)
+        if member not in names
+    ]
+    failures.extend(
+        f"wheel contains generated cache bytecode: {member}"
+        for member in sorted(names)
+        if "__pycache__" in member or member.endswith(".pyc")
+    )
+    return failures
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

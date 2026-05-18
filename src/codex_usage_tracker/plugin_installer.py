@@ -64,8 +64,7 @@ def _prepare_plugin_dir(plugin_dir: Path, *, force: bool) -> bool:
         plugin_dir.mkdir(parents=True, exist_ok=True)
         return True
     if plugin_dir.exists():
-        marker = plugin_dir / ".codex-plugin" / "plugin.json"
-        if not marker.exists():
+        if not _is_existing_tracker_plugin(plugin_dir):
             raise FileExistsError(
                 f"{plugin_dir} exists but does not look like a Codex Usage Tracker plugin."
             )
@@ -76,6 +75,17 @@ def _prepare_plugin_dir(plugin_dir: Path, *, force: bool) -> bool:
         return True
     plugin_dir.mkdir(parents=True, exist_ok=True)
     return False
+
+
+def _is_existing_tracker_plugin(plugin_dir: Path) -> bool:
+    manifest_path = plugin_dir / ".codex-plugin" / "plugin.json"
+    if not manifest_path.exists():
+        return False
+    try:
+        manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return False
+    return isinstance(manifest, dict) and manifest.get("name") == PLUGIN_NAME
 
 
 def _absolute_path(path: Path) -> Path:

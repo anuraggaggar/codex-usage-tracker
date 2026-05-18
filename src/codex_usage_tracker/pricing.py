@@ -12,6 +12,7 @@ from typing import Any, Callable
 from urllib.error import URLError
 from urllib.request import Request, urlopen
 
+from codex_usage_tracker import __version__
 from codex_usage_tracker.paths import DEFAULT_PRICING_PATH
 
 OPENAI_PRICING_MD_URL = "https://developers.openai.com/api/docs/pricing.md"
@@ -467,7 +468,7 @@ def _fetch_text(url: str) -> str:
         url,
         headers={
             "Accept": "text/markdown,text/plain;q=0.9,*/*;q=0.1",
-            "User-Agent": "codex-usage-tracker/0.1",
+            "User-Agent": f"codex-usage-tracker/{__version__}",
         },
     )
     try:

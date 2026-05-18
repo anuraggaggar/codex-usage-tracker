@@ -25,6 +25,10 @@ jobs:
         run: python -m pytest
       - name: Compile
         run: python -m compileall src
+      - name: Release readiness
+        run: python scripts/check_release.py
+      - name: Whitespace
+        run: git diff --check
 
   package:
     name: Build package
@@ -40,3 +44,5 @@ jobs:
           python -m pip install ".[dev]"
       - name: Build wheel and sdist
         run: python -m build
+      - name: Verify built wheel
+        run: python scripts/check_release.py --dist

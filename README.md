@@ -62,6 +62,8 @@ Check setup:
 
 ```bash
 codex-usage-tracker doctor
+codex-usage-tracker --version
+python -m codex_usage_tracker --version
 ```
 
 Generate the local dashboard:
@@ -110,6 +112,7 @@ Export CSV:
 
 ```bash
 codex-usage-tracker export --output usage.csv
+codex-usage-tracker export --output usage.csv --limit 0
 ```
 
 Enable optional cost estimates:
@@ -191,6 +194,7 @@ Cost estimates are calculated only from aggregate token fields and your local pr
 python -m pytest
 python -m compileall src
 python -m build
+python scripts/check_release.py --dist
 git diff --check
 codex-usage-tracker update-pricing --output /tmp/codex-usage-pricing.json
 codex-usage-tracker doctor
@@ -200,3 +204,25 @@ codex-usage-tracker pricing-coverage
 codex-usage-tracker summary --preset by-subagent-role
 codex-usage-tracker expensive --limit 5
 ```
+
+## Release Checklist
+
+Before making the repository public or publishing a package:
+
+```bash
+python -m pytest
+python -m compileall src
+python -m build
+python scripts/check_release.py --dist
+git diff --check
+```
+
+Then verify the local package install path:
+
+```bash
+python -m pip install ".[dev]"
+codex-usage-tracker --version
+codex-usage-tracker install-plugin --plugin-dir /tmp/codex-usage-tracker-plugin-smoke --marketplace /tmp/codex-usage-marketplace-smoke.json --python .venv/bin/python --force
+```
+
+Keep the GitHub repository private until you are ready to intentionally switch visibility. The release checker verifies version alignment, required public docs, packaged plugin assets, wheel contents, and obvious tracked secret patterns; it does not publish anything.

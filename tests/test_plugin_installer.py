@@ -60,6 +60,18 @@ def test_install_plugin_refuses_non_plugin_path_without_force(tmp_path: Path) ->
         install_plugin(plugin_dir=plugin_dir, marketplace_path=tmp_path / "marketplace.json")
 
 
+def test_install_plugin_refuses_different_plugin_manifest(tmp_path: Path) -> None:
+    plugin_dir = tmp_path / "plugins" / "codex-usage-tracker"
+    (plugin_dir / ".codex-plugin").mkdir(parents=True)
+    (plugin_dir / ".codex-plugin" / "plugin.json").write_text(
+        json.dumps({"name": "different-plugin"}),
+        encoding="utf-8",
+    )
+
+    with pytest.raises(FileExistsError):
+        install_plugin(plugin_dir=plugin_dir, marketplace_path=tmp_path / "marketplace.json")
+
+
 def test_install_plugin_preserves_requested_relative_python(tmp_path: Path, monkeypatch) -> None:
     monkeypatch.chdir(tmp_path)
     plugin_dir = tmp_path / "plugins" / "codex-usage-tracker"

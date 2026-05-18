@@ -19,6 +19,7 @@ Run these before opening a pull request:
 python -m pytest
 python -m compileall src
 python -m build
+python scripts/check_release.py --dist
 git diff --check
 ```
 

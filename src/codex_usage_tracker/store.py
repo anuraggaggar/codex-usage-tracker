@@ -365,9 +365,10 @@ def export_usage_csv(
     output_path.parent.mkdir(parents=True, exist_ok=True)
     sql = "SELECT * FROM usage_events ORDER BY event_timestamp, cumulative_total_tokens"
     params: tuple[int, ...] = ()
-    if limit is not None:
+    normalized_limit = _normalize_limit(limit)
+    if normalized_limit is not None:
         sql += " LIMIT ?"
-        params = (limit,)
+        params = (normalized_limit,)
     with connect(db_path) as conn:
         init_db(conn)
         rows = [_row_to_dict(row) for row in conn.execute(sql, params)]

@@ -7,8 +7,8 @@ import json
 import os
 import shutil
 from importlib import resources
-from importlib.resources.abc import Traversable
 from pathlib import Path
+from typing import Any
 
 from codex_usage_tracker.paths import DEFAULT_DASHBOARD_PATH, DEFAULT_PRICING_PATH
 from codex_usage_tracker.pricing import annotate_rows_with_efficiency, load_pricing_config
@@ -80,7 +80,7 @@ def _dashboard_guide_href(output_path: Path) -> str | None:
     return "codex-usage-tracker-guide/dashboard-guide.html"
 
 
-def _copy_resource_tree(source: Traversable, target: Path) -> None:
+def _copy_resource_tree(source: Any, target: Path) -> None:
     target.mkdir(parents=True, exist_ok=True)
     for child in source.iterdir():
         destination = target / child.name

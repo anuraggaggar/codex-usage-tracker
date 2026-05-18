@@ -7,7 +7,6 @@ import shutil
 import sys
 from dataclasses import dataclass
 from importlib import resources
-from importlib.resources.abc import Traversable
 from pathlib import Path
 from typing import Any
 
@@ -117,7 +116,7 @@ def _copy_tree(resource_name: str, destination: Path) -> None:
     _copy_resource_tree(source, destination)
 
 
-def _copy_resource_tree(source: Traversable, destination: Path) -> None:
+def _copy_resource_tree(source: Any, destination: Path) -> None:
     for child in source.iterdir():
         target = destination / child.name
         if child.is_dir():

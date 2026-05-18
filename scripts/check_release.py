@@ -143,6 +143,11 @@ def _check_packaging_metadata() -> list[str]:
         failures.append(".mcp.json should point at the bundled MCP bootstrap launcher")
     if mcp_server.get("startup_timeout_sec") != 120:
         failures.append(".mcp.json should allow enough startup time for first-run runtime bootstrap")
+    launcher = (REPO_ROOT / "skills/codex-usage-tracker/scripts/run_mcp.py").read_text(
+        encoding="utf-8"
+    )
+    if "codex-usage-tracker.git@main" in launcher:
+        failures.append("MCP runtime launcher must pin the package spec instead of tracking main")
     return failures
 
 

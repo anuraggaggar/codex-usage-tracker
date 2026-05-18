@@ -101,6 +101,10 @@ def test_dashboard_and_csv_are_aggregate_only(tmp_path: Path) -> None:
     assert "detail-section" in dashboard
     assert "time-cell" in dashboard
     assert "formatTimestamp" in dashboard
+    assert "threadModelSummary" in dashboard
+    assert "model-pill" in dashboard
+    assert "Back to top" in dashboard
+    assert "updateToTopVisibility" in dashboard
     assert "Live ·" in dashboard
     assert "loadLimit" in dashboard
     assert "pager" in dashboard

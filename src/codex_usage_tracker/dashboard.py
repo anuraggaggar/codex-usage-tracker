@@ -382,6 +382,8 @@ def _html(payload: str) -> str:
     .pill {{
       display: inline-flex;
       align-items: center;
+      justify-content: center;
+      max-width: 100%;
       min-height: 22px;
       padding: 2px 8px;
       border-radius: 999px;
@@ -389,6 +391,14 @@ def _html(payload: str) -> str:
       color: #184fc5;
       font-weight: 680;
       font-size: 12px;
+      line-height: 1.08;
+      white-space: nowrap;
+    }}
+    .model-pill {{
+      width: max-content;
+      max-width: min(132px, 100%);
+      min-width: 0;
+      overflow: hidden;
     }}
     .flags {{
       display: flex;
@@ -546,6 +556,33 @@ def _html(payload: str) -> str:
       color: var(--ink);
       font: 12px/1.45 ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
     }}
+    .to-top {{
+      position: fixed;
+      right: 18px;
+      bottom: 18px;
+      z-index: 4;
+      min-height: 38px;
+      padding: 8px 12px;
+      border: 1px solid #c7d2fe;
+      border-radius: 999px;
+      background: var(--panel);
+      color: var(--blue);
+      box-shadow: var(--shadow);
+      font-size: 12px;
+      font-weight: 780;
+      cursor: pointer;
+      opacity: 0;
+      pointer-events: none;
+      transform: translateY(10px);
+      transition: opacity 160ms ease, transform 160ms ease;
+    }}
+    .to-top[data-visible="true"] {{
+      opacity: 1;
+      pointer-events: auto;
+      transform: translateY(0);
+    }}
+    .to-top:hover {{ background: #eff6ff; }}
+    .to-top:active {{ transform: translateY(1px); }}
     @media (max-width: 980px) {{
       .filters, .cards, .grid {{ grid-template-columns: 1fr; }}
       main, header {{ padding-left: 16px; padding-right: 16px; }}
@@ -643,6 +680,7 @@ def _html(payload: str) -> str:
       </section>
     </div>
   </main>
+  <button id="toTop" class="to-top" type="button" aria-label="Back to top">Top</button>
   <script id="usage-data" type="application/json">{payload}</script>
   <script>
     const initialPayload = JSON.parse(document.getElementById('usage-data').textContent);
@@ -670,6 +708,7 @@ def _html(payload: str) -> str:
     const prevPageEl = document.getElementById('prevPage');
     const nextPageEl = document.getElementById('nextPage');
     const pageStatusEl = document.getElementById('pageStatus');
+    const toTopEl = document.getElementById('toTop');
     const number = new Intl.NumberFormat();
     const tableDateFormat = new Intl.DateTimeFormat([], {{ month: 'short', day: 'numeric', year: 'numeric' }});
     const tableTimeFormat = new Intl.DateTimeFormat([], {{ hour: 'numeric', minute: '2-digit', second: '2-digit' }});
@@ -1083,6 +1122,27 @@ def _html(payload: str) -> str:
       if (unique.length === 1) return unique[0];
       return `${{unique[0]}} +${{unique.length - 1}} ${{fallback.toLowerCase()}}`;
     }}
+    function threadModelSummary(calls) {{
+      const models = [...new Set(calls.map(row => row.model).filter(Boolean))].sort();
+      if (!models.length) return 'Unknown';
+      if (models.length === 1) return models[0];
+      const nonReviewModels = models.filter(model => model !== 'codex-auto-review');
+      const primary = nonReviewModels.length ? nonReviewModels[0] : models[0];
+      return `${{primary}} +${{models.length - 1}} models`;
+    }}
+    function fitModelPills() {{
+      document.querySelectorAll('.model-pill').forEach(pill => {{
+        pill.style.fontSize = '';
+        const maxSize = 12;
+        const minSize = 9;
+        let size = maxSize;
+        while (size > minSize && pill.scrollWidth > pill.clientWidth) {{
+          size -= 0.5;
+          pill.style.fontSize = `${{size}}px`;
+        }}
+        pill.title = pill.dataset.fullLabel || pill.textContent || '';
+      }});
+    }}
     function dominantParentThread(calls, ownLabel) {{
       const counts = new Map();
       for (const row of calls) {{
@@ -1166,7 +1226,7 @@ def _html(payload: str) -> str:
         const subagentCount = calls.filter(isSubagent).length;
         const autoReviewCount = calls.filter(isAutoReview).length;
         const attachedCount = calls.filter(row => rowAttachment(row).relation !== 'direct' && rowAttachment(row).relation !== 'session').length;
-        const modelSummary = compactListSummary(calls.map(row => row.model), 'models');
+        const modelSummary = threadModelSummary(calls);
         const effortSummary = compactListSummary(calls.map(row => row.effort), 'efforts');
         const parentThreadLabel = dominantParentThread(calls, group.label);
         return {{
@@ -1237,6 +1297,7 @@ def _html(payload: str) -> str:
       }} else {{
         renderCalls(rows);
       }}
+      fitModelPills();
     }}
     function renderCalls(rows) {{
       const page = paginate(rows);
@@ -1253,7 +1314,7 @@ def _html(payload: str) -> str:
         tr.innerHTML = `
           <td>${{renderTimeCell(row.event_timestamp)}}</td>
           <td title="${{escapeHtml(short(row.session_id))}}">${{escapeHtml(truncate(rowThreadLabel(row)))}}</td>
-          <td><span class="pill">${{escapeHtml(short(row.model))}}</span></td>
+          <td><span class="pill model-pill" data-full-label="${{escapeHtml(short(row.model))}}">${{escapeHtml(short(row.model))}}</span></td>
           <td>${{escapeHtml(short(row.effort))}}</td>
           <td class="num">${{number.format(row.total_tokens || 0)}}</td>
           <td class="num">${{escapeHtml(row.pricing_estimated ? `${{money(row.estimated_cost_usd)}}*` : money(row.estimated_cost_usd))}}</td>
@@ -1321,7 +1382,7 @@ def _html(payload: str) -> str:
               </span>
             </div>
           </td>
-          <td><span class="pill">${{escapeHtml(truncate(group.modelSummary, 28))}}</span></td>
+          <td><span class="pill model-pill" data-full-label="${{escapeHtml(short(group.modelSummary))}}">${{escapeHtml(short(group.modelSummary))}}</span></td>
           <td>${{escapeHtml(truncate(group.effortSummary, 28))}}</td>
           <td class="num">${{number.format(group.totalTokens)}}</td>
           <td class="num">${{pricingConfigured ? money(group.estimatedCost) : 'Not configured'}}</td>
@@ -1365,7 +1426,7 @@ def _html(payload: str) -> str:
         return `
           <tr class="thread-call-row" tabindex="0" role="button" data-record-id="${{escapeHtml(row.record_id || '')}}">
             <td>${{renderTimeCell(row.event_timestamp)}}</td>
-            <td>${{escapeHtml(short(row.model))}}</td>
+            <td><span class="pill model-pill" data-full-label="${{escapeHtml(short(row.model))}}">${{escapeHtml(short(row.model))}}</span></td>
             <td>${{escapeHtml(short(row.effort))}}</td>
             <td>${{escapeHtml(sourceLabel(row))}}</td>
             <td class="num">${{number.format(row.total_tokens || 0)}}</td>
@@ -1525,6 +1586,9 @@ def _html(payload: str) -> str:
     function updateLiveStatus(message) {{
       liveStatusEl.textContent = message;
     }}
+    function updateToTopVisibility() {{
+      toTopEl.dataset.visible = window.scrollY > 320 ? 'true' : 'false';
+    }}
     function applyDashboardPayload(nextPayload) {{
       data = payloadRows(nextPayload);
       pricingConfigured = Boolean(nextPayload.pricing_configured);
@@ -1600,6 +1664,8 @@ def _html(payload: str) -> str:
     document.addEventListener('visibilitychange', () => {{
       if (document.visibilityState === 'visible' && autoRefreshEl.checked) refreshDashboardData(false);
     }});
+    window.addEventListener('scroll', updateToTopVisibility, {{ passive: true }});
+    toTopEl.addEventListener('click', () => window.scrollTo({{ top: 0, behavior: 'smooth' }}));
     prevPageEl.addEventListener('click', () => {{
       currentPage = Math.max(1, currentPage - 1);
       render();
@@ -1649,6 +1715,7 @@ def _html(payload: str) -> str:
       updateLiveStatus(`Live · polls every ${{liveRefreshIntervalMs / 1000}}s · ${{loadedRowsDescription()}}`);
       scheduleAutoRefresh();
     }}
+    updateToTopVisibility();
     render();
   </script>
 </body>

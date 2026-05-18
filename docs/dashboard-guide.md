@@ -36,6 +36,7 @@ The dashboard opens in `Calls` view. This is the most direct way to inspect indi
 - Time values are shown in your browser's local date/time format while sorting still uses the logged timestamp.
 - Click a column header like `Time`, `Thread`, `Tokens`, `Cost`, or `Cache` to sort. Click the same header again to reverse the direction.
 - Hover or click a row to pin its aggregate fields in `Call Details`; on desktop, the details panel stays visible as you scroll.
+- After you scroll down, the bottom-right `Top` button returns to the top of the dashboard.
 
 Useful interpretation notes:
 
@@ -52,6 +53,7 @@ Use `Threads` view when you want to understand a work session as a group instead
 
 - Each thread row groups the filtered model calls by thread name, falling back to session id when no name is available.
 - Thread rows show latest activity, call count, model mix, effort mix, total tokens, estimated cost, cache ratio, and signal count.
+- Mixed model summaries prefer the primary non-review model; `codex-auto-review` appears as the thread model only for review-only threads.
 - Click a thread row to expand or collapse its calls. Multiple thread rows can stay open.
 - Expanded calls are ordered oldest to newest by event timestamp, then cumulative token count.
 - Subagents with logged parent session ids are shown under the parent thread. Auto-review sessions without explicit parent ids may be attached by cwd and nearby activity and are marked as attached or inferred in the details.

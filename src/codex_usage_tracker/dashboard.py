@@ -250,6 +250,12 @@ def _html(payload: str, guide_href: str | None = None) -> str:
       gap: 12px;
       margin-bottom: 18px;
     }}
+    .date-range-label {{
+      grid-column: 1 / -1;
+    }}
+    .date-range-label select {{
+      max-width: 220px;
+    }}
     label {{ display: grid; gap: 6px; font-size: 12px; font-weight: 680; color: var(--muted); }}
     input, select {{
       width: 100%;
@@ -699,6 +705,7 @@ def _html(payload: str, guide_href: str | None = None) -> str:
   </header>
   <main>
     <div class="filters">
+      <label class="date-range-label">Date Range<select id="dateRange"><option value="all">All time</option><option value="today">Today</option><option value="yesterday">Yesterday</option><option value="7d">Last 7 days</option><option value="30d">Last 30 days</option><option value="this_month">This Month</option><option value="last_month">Last Month</option></select></label>
       <label>Search<input id="search" type="search" placeholder="Thread, cwd, model, session"></label>
       <label>Model<select id="model"><option value="">All models</option></select></label>
       <label>Reasoning<select id="effort"><option value="">All efforts</option></select></label>
@@ -709,6 +716,8 @@ def _html(payload: str, guide_href: str | None = None) -> str:
       <div class="card"><span>Visible Calls</span><strong id="visibleCalls">0</strong></div>
       <div class="card"><span>Total Tokens</span><strong id="totalTokens">0</strong></div>
       <div class="card"><span>Cached Input</span><strong id="cachedTokens">0</strong></div>
+      <div class="card"><span>Uncached Input</span><strong id="uncachedTokens">0</strong></div>
+      <div class="card"><span>Total Output</span><strong id="outputTokens">0</strong></div>
       <div class="card"><span>Reasoning Output</span><strong id="reasoningTokens">0</strong></div>
       <div class="card"><span>Estimated Cost</span><strong id="estimatedCost">$0.00</strong></div>
       <div class="card"><span>Price Coverage</span><strong id="priceCoverage">0.0%</strong></div>
@@ -768,6 +777,7 @@ def _html(payload: str, guide_href: str | None = None) -> str:
     const modelEl = document.getElementById('model');
     const effortEl = document.getElementById('effort');
     const pricingStatusEl = document.getElementById('pricingStatus');
+    const dateRangeEl = document.getElementById('dateRange');
     const sortEl = document.getElementById('sort');
     const tableTitleEl = document.getElementById('tableTitle');
     const tableCaptionEl = document.getElementById('tableCaption');
@@ -984,11 +994,42 @@ def _html(payload: str, guide_href: str | None = None) -> str:
         sourceEl.title = pricingConfigured ? '' : 'Run codex-usage-tracker update-pricing to configure estimated costs.';
       }}
     }}
+    function dateRangeBounds() {{
+      const value = dateRangeEl.value;
+      if (!value || value === 'all') return null;
+      const now = new Date();
+      const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+      if (value === 'today') return {{ start: todayStart }};
+      if (value === 'yesterday') {{
+        const s = new Date(todayStart);
+        s.setDate(s.getDate() - 1);
+        return {{ start: s, end: todayStart }};
+      }}
+      if (value === '7d') {{
+        const s = new Date(todayStart);
+        s.setDate(s.getDate() - 6);
+        return {{ start: s }};
+      }}
+      if (value === '30d') {{
+        const s = new Date(todayStart);
+        s.setDate(s.getDate() - 29);
+        return {{ start: s }};
+      }}
+      if (value === 'this_month') return {{ start: new Date(now.getFullYear(), now.getMonth(), 1) }};
+      if (value === 'last_month') {{
+        return {{
+          start: new Date(now.getFullYear(), now.getMonth() - 1, 1),
+          end: new Date(now.getFullYear(), now.getMonth(), 1),
+        }};
+      }}
+      return null;
+    }}
     function filtered() {{
       const term = searchEl.value.trim().toLowerCase();
       const model = modelEl.value;
       const effort = effortEl.value;
       const pricingStatus = pricingStatusEl.value;
+      const bounds = dateRangeBounds();
       const rows = data.filter(row => {{
         const haystack = [
           rowThreadLabel(row),
@@ -1009,7 +1050,17 @@ def _html(payload: str, guide_href: str | None = None) -> str:
           || (pricingStatus === 'official' && row.pricing_model && !row.pricing_estimated)
           || (pricingStatus === 'estimated' && row.pricing_estimated)
           || (pricingStatus === 'unpriced' && !row.pricing_model);
-        return (!term || haystack.includes(term)) && (!model || row.model === model) && (!effort || row.effort === effort) && statusMatches;
+        let dateMatches = true;
+        if (bounds) {{
+          const t = parsedTimestamp(row.event_timestamp);
+          if (!t) {{
+            dateMatches = false;
+          }} else {{
+            if (bounds.start && t < bounds.start) dateMatches = false;
+            if (bounds.end && t >= bounds.end) dateMatches = false;
+          }}
+        }}
+        return (!term || haystack.includes(term)) && (!model || row.model === model) && (!effort || row.effort === effort) && statusMatches && dateMatches;
       }});
       rows.sort(compareCalls);
       return rows;
@@ -1357,6 +1408,8 @@ def _html(payload: str, guide_href: str | None = None) -> str:
       document.getElementById('visibleCalls').textContent = number.format(rows.length);
       document.getElementById('totalTokens').textContent = number.format(rows.reduce((sum, row) => sum + Number(row.total_tokens || 0), 0));
       document.getElementById('cachedTokens').textContent = number.format(rows.reduce((sum, row) => sum + Number(row.cached_input_tokens || 0), 0));
+      document.getElementById('uncachedTokens').textContent = number.format(rows.reduce((sum, row) => sum + Number(row.uncached_input_tokens || 0), 0));
+      document.getElementById('outputTokens').textContent = number.format(rows.reduce((sum, row) => sum + Number(row.output_tokens || 0) + Number(row.reasoning_output_tokens || 0), 0));
       document.getElementById('reasoningTokens').textContent = number.format(rows.reduce((sum, row) => sum + Number(row.reasoning_output_tokens || 0), 0));
       const estimatedCost = rows.reduce((sum, row) => sum + Number(row.estimated_cost_usd || 0), 0);
       const pricedTokens = rows.reduce((sum, row) => sum + (row.pricing_model ? Number(row.total_tokens || 0) : 0), 0);
@@ -1772,7 +1825,7 @@ def _html(payload: str, guide_href: str | None = None) -> str:
       const row = rowByRecordId.get(callRow.dataset.recordId);
       if (row) showDetail(row);
     }});
-    [searchEl, modelEl, effortEl, pricingStatusEl].forEach(el => el.addEventListener('input', () => {{
+    [searchEl, modelEl, effortEl, pricingStatusEl, dateRangeEl].forEach(el => el.addEventListener('input', () => {{
       currentPage = 1;
       render();
     }}));

@@ -250,12 +250,7 @@ def _html(payload: str, guide_href: str | None = None) -> str:
       gap: 12px;
       margin-bottom: 18px;
     }}
-    .date-range-label {{
-      grid-column: 1 / -1;
-    }}
-    .date-range-label select {{
-      max-width: 220px;
-    }}
+
     label {{ display: grid; gap: 6px; font-size: 12px; font-weight: 680; color: var(--muted); }}
     input, select {{
       width: 100%;
@@ -684,19 +679,21 @@ def _html(payload: str, guide_href: str | None = None) -> str:
       </div>
       <div class="live-bar" aria-label="Dashboard refresh controls">
         <button id="refreshDashboard" class="refresh-button" type="button">Refresh</button>
-        <label class="live-toggle"><input id="autoRefresh" type="checkbox" checked> Live</label>
+        <label class="live-toggle"><input id="autoRefresh" type="checkbox"> Live</label>
         <label class="load-control">Load
           <select id="loadLimit">
             <option value="5000">5,000 calls</option>
             <option value="10000">10,000 calls</option>
             <option value="20000">20,000 calls</option>
-            <option value="all">All calls</option>
+            <option value="all" selected>All calls</option>
           </select>
+        </label>
+        <label class="load-control">Date Range
+          <select id="dateRange"><option value="all">All time</option><option value="today">Today</option><option value="yesterday">Yesterday</option><option value="7d">Last 7 days</option><option value="30d">Last 30 days</option><option value="this_month" selected>This Month</option><option value="last_month">Last Month</option></select>
         </label>
       </div>
     </div>
     <div class="header-meta">
-      <span class="disclaimer-chip" title="Codex Usage Tracker is independent and is not made by, affiliated with, endorsed by, sponsored by, or supported by OpenAI. OpenAI and Codex are trademarks of OpenAI.">Unofficial project - not affiliated with OpenAI</span>
       <span class="status-chip">Aggregate only</span>
       <span id="liveStatus" class="live-status">Static snapshot loaded.</span>
       <span id="pricingSource" class="source-line"></span>
@@ -705,7 +702,6 @@ def _html(payload: str, guide_href: str | None = None) -> str:
   </header>
   <main>
     <div class="filters">
-      <label class="date-range-label">Date Range<select id="dateRange"><option value="all">All time</option><option value="today">Today</option><option value="yesterday">Yesterday</option><option value="7d">Last 7 days</option><option value="30d">Last 30 days</option><option value="this_month">This Month</option><option value="last_month">Last Month</option></select></label>
       <label>Search<input id="search" type="search" placeholder="Thread, cwd, model, session"></label>
       <label>Model<select id="model"><option value="">All models</option></select></label>
       <label>Reasoning<select id="effort"><option value="">All efforts</option></select></label>
@@ -720,9 +716,6 @@ def _html(payload: str, guide_href: str | None = None) -> str:
       <div class="card"><span>Total Output</span><strong id="outputTokens">0</strong></div>
       <div class="card"><span>Reasoning Output</span><strong id="reasoningTokens">0</strong></div>
       <div class="card"><span>Estimated Cost</span><strong id="estimatedCost">$0.00</strong></div>
-      <div class="card"><span>Price Coverage</span><strong id="priceCoverage">0.0%</strong></div>
-      <div class="card"><span>Estimated Tokens</span><strong id="estimatedTokens">0</strong></div>
-      <div class="card"><span>Unpriced Tokens</span><strong id="unpricedTokens">0</strong></div>
     </div>
     <div class="grid">
       <section>
@@ -1840,7 +1833,7 @@ def _html(payload: str, guide_href: str | None = None) -> str:
       loadLimitEl.disabled = true;
       updateLiveStatus(`Static snapshot · ${{loadedRowsDescription()}}`);
     }} else {{
-      updateLiveStatus(`Live · polls every ${{liveRefreshIntervalMs / 1000}}s · ${{loadedRowsDescription()}}`);
+      updateLiveStatus(`Live paused · ${{loadedRowsDescription()}}`);
       scheduleAutoRefresh();
     }}
     updateToTopVisibility();

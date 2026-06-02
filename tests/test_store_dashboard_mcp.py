@@ -194,7 +194,7 @@ def test_dashboard_and_csv_are_aggregate_only(tmp_path: Path) -> None:
     assert "Aggregate only" in dashboard
     assert "Call Details" in dashboard
     assert "Dashboard guide" in dashboard
-    assert "github.com/douglasmonsky/codex-usage-tracker/blob/main/docs/dashboard-guide.md" not in dashboard
+    assert "github.com/anuraggaggar/codex-usage-tracker/blob/main/docs/dashboard-guide.md" not in dashboard
     assert "codex-usage-tracker-guide/dashboard-guide.html" in dashboard
     assert (tmp_path / "codex-usage-tracker-guide" / "dashboard-guide.html").exists()
     assert (tmp_path / "codex-usage-tracker-guide" / "assets" / "dashboard-calls.png").exists()

@@ -5,8 +5,8 @@
   "author": {
     "name": "Douglas Monsky"
   },
-  "homepage": "https://github.com/douglasmonsky/codex-usage-tracker",
-  "repository": "https://github.com/douglasmonsky/codex-usage-tracker",
+  "homepage": "https://github.com/anuraggaggar/codex-usage-tracker",
+  "repository": "https://github.com/anuraggaggar/codex-usage-tracker",
   "license": "MIT",
   "keywords": [
     "codex",
@@ -28,9 +28,9 @@
       "Read",
       "Write"
     ],
-    "websiteURL": "https://github.com/douglasmonsky/codex-usage-tracker",
-    "privacyPolicyURL": "https://github.com/douglasmonsky/codex-usage-tracker",
-    "termsOfServiceURL": "https://github.com/douglasmonsky/codex-usage-tracker",
+    "websiteURL": "https://github.com/anuraggaggar/codex-usage-tracker",
+    "privacyPolicyURL": "https://github.com/anuraggaggar/codex-usage-tracker",
+    "termsOfServiceURL": "https://github.com/anuraggaggar/codex-usage-tracker",
     "defaultPrompt": [
       "Check my Codex usage tracker setup",
       "Show my Codex token usage summary",

@@ -8,13 +8,8 @@ Codex Usage Tracker reads the JSONL logs already written by Codex, indexes aggre
 
 ## Dashboard Preview
 
-![Calls view with filters, totals, model-call rows, and the details panel.](docs/assets/dashboard-calls.png)
+<img width="1444" height="793" alt="image" src="https://github.com/user-attachments/assets/b6d42407-b99b-4ce3-9306-c70a43941a48" />
 
-![Threads view with grouped Codex threads and expanded chronological calls.](docs/assets/dashboard-threads.png)
-
-![Call Details panel showing aggregate token, pricing, context, and thread attachment fields.](docs/assets/dashboard-details.png)
-
-These screenshots use synthetic aggregate fixture data. They do not contain prompts, assistant responses, tool output, or real Codex session content.
 
 ## Why Use It
 

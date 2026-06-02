@@ -70,7 +70,7 @@ The tracker intentionally does not store prompts, assistant messages, tool outpu
 Open a Codex session on your machine and paste this:
 
 ```text
-Install and configure Codex Usage Tracker from [https://github.com/douglasmonsky/codex-usage-tracker](https://github.com/anuraggaggar/codex-usage-tracker).
+Install and configure Codex Usage Tracker from https://github.com/anuraggaggar/codex-usage-tracker.
 Use pipx if it is available. If pipx is missing, install it with Homebrew or use a local virtual environment.
 After installation, run codex-usage-tracker install-plugin, update-pricing, refresh, doctor, and serve-dashboard --open.
 Verify the dashboard opens locally and tell me the dashboard URL plus whether I need to restart Codex for plugin discovery.
@@ -81,7 +81,7 @@ Codex should run roughly:
 ```bash
 brew install pipx
 pipx ensurepath
-pipx install "git+https://github.com/douglasmonsky/codex-usage-tracker.git"
+pipx install "git+https://github.com/anuraggaggar/codex-usage-tracker.git"
 codex-usage-tracker install-plugin
 codex-usage-tracker update-pricing
 codex-usage-tracker refresh
@@ -98,7 +98,7 @@ Run:
 ```bash
 brew install pipx
 pipx ensurepath
-pipx install "git+https://github.com/douglasmonsky/codex-usage-tracker.git"
+pipx install "git+https://github.com/anuraggaggar/codex-usage-tracker.git"
 codex-usage-tracker install-plugin
 codex-usage-tracker update-pricing
 codex-usage-tracker refresh
@@ -135,7 +135,7 @@ Generated dashboards also link to a bundled local HTML copy of the guide. Set `C
 ## Development Setup
 
 ```bash
-git clone https://github.com/douglasmonsky/codex-usage-tracker.git
+git clone https://github.com/anuraggaggar/codex-usage-tracker.git
 cd codex-usage-tracker
 python3 -m venv .venv
 . .venv/bin/activate

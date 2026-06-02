@@ -70,7 +70,7 @@ The tracker intentionally does not store prompts, assistant messages, tool outpu
 Open a Codex session on your machine and paste this:
 
 ```text
-Install and configure Codex Usage Tracker from https://github.com/douglasmonsky/codex-usage-tracker.
+Install and configure Codex Usage Tracker from [https://github.com/douglasmonsky/codex-usage-tracker](https://github.com/anuraggaggar/codex-usage-tracker).
 Use pipx if it is available. If pipx is missing, install it with Homebrew or use a local virtual environment.
 After installation, run codex-usage-tracker install-plugin, update-pricing, refresh, doctor, and serve-dashboard --open.
 Verify the dashboard opens locally and tell me the dashboard URL plus whether I need to restart Codex for plugin discovery.

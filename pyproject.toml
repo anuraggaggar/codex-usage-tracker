@@ -33,10 +33,10 @@ dependencies = [
 ]
 
 [project.urls]
-Homepage = "https://github.com/douglasmonsky/codex-usage-tracker"
-Repository = "https://github.com/douglasmonsky/codex-usage-tracker"
-Issues = "https://github.com/douglasmonsky/codex-usage-tracker/issues"
-Changelog = "https://github.com/douglasmonsky/codex-usage-tracker/blob/main/CHANGELOG.md"
+Homepage = "https://github.com/anuraggaggar/codex-usage-tracker"
+Repository = "https://github.com/anuraggaggar/codex-usage-tracker"
+Issues = "https://github.com/anuraggaggar/codex-usage-tracker/issues"
+Changelog = "https://github.com/anuraggaggar/codex-usage-tracker/blob/main/CHANGELOG.md"
 
 [project.optional-dependencies]
 dev = [

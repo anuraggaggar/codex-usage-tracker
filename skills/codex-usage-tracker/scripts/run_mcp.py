@@ -15,7 +15,7 @@ from pathlib import Path
 
 PACKAGE_SPEC = os.environ.get(
     "CODEX_USAGE_TRACKER_PACKAGE_SPEC",
-    "git+https://github.com/douglasmonsky/codex-usage-tracker.git@21740923d11eea03ed1eab30603aa1362b528d3b",
+    "git+https://github.com/anuraggaggar/codex-usage-tracker.git",
 )
 RUNTIME_VERSION = "0.2.0"
 MODULE_CHECK = (

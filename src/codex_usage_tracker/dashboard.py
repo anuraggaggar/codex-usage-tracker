@@ -1405,14 +1405,7 @@ def _html(payload: str, guide_href: str | None = None) -> str:
       document.getElementById('outputTokens').textContent = number.format(rows.reduce((sum, row) => sum + Number(row.output_tokens || 0) + Number(row.reasoning_output_tokens || 0), 0));
       document.getElementById('reasoningTokens').textContent = number.format(rows.reduce((sum, row) => sum + Number(row.reasoning_output_tokens || 0), 0));
       const estimatedCost = rows.reduce((sum, row) => sum + Number(row.estimated_cost_usd || 0), 0);
-      const pricedTokens = rows.reduce((sum, row) => sum + (row.pricing_model ? Number(row.total_tokens || 0) : 0), 0);
-      const estimatedTokens = rows.reduce((sum, row) => sum + (row.pricing_estimated ? Number(row.total_tokens || 0) : 0), 0);
-      const unpricedTokens = rows.reduce((sum, row) => sum + (!row.pricing_model ? Number(row.total_tokens || 0) : 0), 0);
-      const totalTokens = rows.reduce((sum, row) => sum + Number(row.total_tokens || 0), 0);
       document.getElementById('estimatedCost').textContent = pricingConfigured ? money(estimatedCost) : 'Not configured';
-      document.getElementById('priceCoverage').textContent = pct(totalTokens ? pricedTokens / totalTokens : 0);
-      document.getElementById('estimatedTokens').textContent = number.format(estimatedTokens);
-      document.getElementById('unpricedTokens').textContent = number.format(unpricedTokens);
       callsViewEl.setAttribute('aria-pressed', activeView === 'calls' ? 'true' : 'false');
       threadsViewEl.setAttribute('aria-pressed', activeView === 'threads' ? 'true' : 'false');
       if (activeView === 'threads') {{

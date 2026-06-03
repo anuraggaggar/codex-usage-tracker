@@ -43,7 +43,7 @@ def load_session_index(codex_home: Path = DEFAULT_CODEX_HOME) -> dict[str, Sessi
 
 
 def find_session_logs(
-    codex_home: Path = DEFAULT_CODEX_HOME, include_archived: bool = False
+    codex_home: Path = DEFAULT_CODEX_HOME, include_archived: bool = True
 ) -> list[Path]:
     """Find local Codex JSONL logs."""
 

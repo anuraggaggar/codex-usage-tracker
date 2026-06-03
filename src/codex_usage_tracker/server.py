@@ -35,7 +35,7 @@ def serve_dashboard(
     context_chars: int = DEFAULT_CONTEXT_CHARS,
     open_browser: bool = False,
     codex_home: Path = DEFAULT_CODEX_HOME,
-    include_archived: bool = False,
+    include_archived: bool = True,
 ) -> None:
     """Generate and serve the dashboard plus a localhost-only context endpoint."""
 

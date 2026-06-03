@@ -149,10 +149,12 @@ def test_session_index_join_and_archived_log_discovery(tmp_path: Path) -> None:
 
     index = load_session_index(codex_home)
     active_only = find_session_logs(codex_home, include_archived=False)
+    default_logs = find_session_logs(codex_home)
     with_archived = find_session_logs(codex_home, include_archived=True)
 
     assert index[SESSION_ID].thread_name == "Add Codex token tracking"
     assert active_only == [session_log]
+    assert default_logs == [archive_log, session_log]
     assert with_archived == [archive_log, session_log]
 
 

@@ -679,7 +679,7 @@ def _html(payload: str, guide_href: str | None = None) -> str:
       </div>
       <div class="live-bar" aria-label="Dashboard refresh controls">
         <button id="refreshDashboard" class="refresh-button" type="button">Refresh</button>
-        <label class="live-toggle"><input id="autoRefresh" type="checkbox"> Live</label>
+        <label class="live-toggle"><input id="autoRefresh" type="checkbox" checked> Live</label>
         <label class="load-control">Load
           <select id="loadLimit">
             <option value="5000">5,000 calls</option>
@@ -711,10 +711,9 @@ def _html(payload: str, guide_href: str | None = None) -> str:
     <div class="cards">
       <div class="card"><span>Visible Calls</span><strong id="visibleCalls">0</strong></div>
       <div class="card"><span>Total Tokens</span><strong id="totalTokens">0</strong></div>
-      <div class="card"><span>Cached Input</span><strong id="cachedTokens">0</strong></div>
-      <div class="card"><span>Uncached Input</span><strong id="uncachedTokens">0</strong></div>
-      <div class="card"><span>Total Output</span><strong id="outputTokens">0</strong></div>
-      <div class="card"><span>Reasoning Output</span><strong id="reasoningTokens">0</strong></div>
+      <div class="card"><span>Cached Input Tokens</span><strong id="cachedTokens">0</strong></div>
+      <div class="card"><span>Uncached Input Tokens</span><strong id="uncachedTokens">0</strong></div>
+      <div class="card"><span>Total Output Tokens</span><strong id="outputTokens">0</strong></div>
       <div class="card"><span>Estimated Cost</span><strong id="estimatedCost">$0.00</strong></div>
     </div>
     <div class="grid">
@@ -1403,7 +1402,6 @@ def _html(payload: str, guide_href: str | None = None) -> str:
       document.getElementById('cachedTokens').textContent = number.format(rows.reduce((sum, row) => sum + Number(row.cached_input_tokens || 0), 0));
       document.getElementById('uncachedTokens').textContent = number.format(rows.reduce((sum, row) => sum + Number(row.uncached_input_tokens || 0), 0));
       document.getElementById('outputTokens').textContent = number.format(rows.reduce((sum, row) => sum + Number(row.output_tokens || 0) + Number(row.reasoning_output_tokens || 0), 0));
-      document.getElementById('reasoningTokens').textContent = number.format(rows.reduce((sum, row) => sum + Number(row.reasoning_output_tokens || 0), 0));
       const estimatedCost = rows.reduce((sum, row) => sum + Number(row.estimated_cost_usd || 0), 0);
       document.getElementById('estimatedCost').textContent = pricingConfigured ? money(estimatedCost) : 'Not configured';
       callsViewEl.setAttribute('aria-pressed', activeView === 'calls' ? 'true' : 'false');
@@ -1826,7 +1824,7 @@ def _html(payload: str, guide_href: str | None = None) -> str:
       loadLimitEl.disabled = true;
       updateLiveStatus(`Static snapshot · ${{loadedRowsDescription()}}`);
     }} else {{
-      updateLiveStatus(`Live paused · ${{loadedRowsDescription()}}`);
+      updateLiveStatus(`Live · polls every ${{liveRefreshIntervalMs / 1000}}s · ${{loadedRowsDescription()}}`);
       scheduleAutoRefresh();
     }}
     updateToTopVisibility();

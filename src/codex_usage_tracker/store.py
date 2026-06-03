@@ -63,7 +63,7 @@ SCHEMA_VERSION = 1
 def refresh_usage_index(
     codex_home: Path = DEFAULT_CODEX_HOME,
     db_path: Path = DEFAULT_DB_PATH,
-    include_archived: bool = False,
+    include_archived: bool = True,
 ) -> RefreshResult:
     """Scan Codex logs and upsert aggregate usage events."""
 

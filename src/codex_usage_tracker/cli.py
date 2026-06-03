@@ -89,7 +89,7 @@ def _main() -> int:
 
     refresh = subparsers.add_parser("refresh", help="Scan Codex logs into SQLite")
     refresh.add_argument("--codex-home", type=Path, default=DEFAULT_CODEX_HOME)
-    refresh.add_argument("--include-archived", action="store_true")
+    refresh.add_argument("--include-archived", action=argparse.BooleanOptionalAction, default=True)
 
     summary = subparsers.add_parser("summary", help="Show aggregate usage summary")
     summary.add_argument(
@@ -179,7 +179,7 @@ def _main() -> int:
         help="Refresh the SQLite index before generating and serving the dashboard",
     )
     serve.add_argument("--codex-home", type=Path, default=DEFAULT_CODEX_HOME)
-    serve.add_argument("--include-archived", action="store_true")
+    serve.add_argument("--include-archived", action=argparse.BooleanOptionalAction, default=True)
 
     expensive = subparsers.add_parser("expensive", help="Show largest last-call usage rows")
     expensive.add_argument("--limit", type=int, default=20)
